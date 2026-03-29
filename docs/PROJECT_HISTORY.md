@@ -55,3 +55,17 @@
 Изменены файлы: AGENTS.md, docs/EXEC_PLAN.md, docs/STATE.md, docs/state.json, docs/DECISIONS.md, docs/PROJECT_HISTORY.md, .gitignore, README.md, README.en.md, LICENSE
 Результат/доказательство: `git commit -m "chore(repo): publish project skeleton and legal metadata — prepare public GitHub repository" ...` -> commit `16ad33e`; `gh repo create "AI-Nikitka93/minsk-smart-groceries" --public --source "." --remote "origin" --push --description "Telegram grocery assistant and promo backend for Minsk on Cloudflare Workers, Turso, and Drizzle ORM"` -> `https://github.com/AI-Nikitka93/minsk-smart-groceries`; `gh repo view "AI-Nikitka93/minsk-smart-groceries" --json nameWithOwner,url,visibility,isPrivate,licenseInfo,defaultBranchRef` -> visibility `PUBLIC`, license `apache-2.0`, branch `main`
 Следующий шаг: Добавить Wrangler bindings/config и smoke tests, затем продолжить deploy path для parser-worker и bot-worker.
+
+Дата и время: 2026-03-29 20:00
+Роль: P-DEPLOY Autonomous Server & Hosting Manager
+Сделано: Добавлены deploy scaffolding файлы для Cloudflare bot-worker и GitHub Actions parser-worker, плюс минимальный Node bootstrap для `npm install` и `ts-node`.
+Изменены файлы: AGENTS.md, docs/PROJECT_MAP.md, docs/EXEC_PLAN.md, docs/STATE.md, docs/state.json, docs/DECISIONS.md, docs/RESEARCH_LOG.md, docs/PROJECT_HISTORY.md, package.json, tsconfig.json, wrangler.toml, src/apps/parser-worker/cli.ts, .github/workflows/parser.yml
+Результат/доказательство: `npm install --package-lock=false` -> exit code 0; `npm run typecheck` -> exit code 0; `npx ts-node src/apps/parser-worker/cli.ts` -> controlled failure `Missing required environment variable: TURSO_DATABASE_URL`; `npx wrangler deploy --config wrangler.toml --dry-run --outdir .wrangler-build` -> exit code 0
+Следующий шаг: Задать реальные secrets/bindings в Cloudflare и GitHub, затем прогнать live smoke tests webhook и parser cron.
+
+Дата и время: 2026-03-29 20:36
+Роль: P-DEPLOY Autonomous Server & Hosting Manager
+Сделано: Проверено наличие локальных env-файлов, GitHub Actions secrets и Cloudflare Worker secrets/bindings для deploy path.
+Изменены файлы: docs/STATE.md, docs/state.json, docs/PROJECT_HISTORY.md
+Результат/доказательство: локальные `.env*` и `.dev.vars*` не найдены; `gh secret list -R "AI-Nikitka93/minsk-smart-groceries" --json name,updatedAt` -> `[]`; `npx wrangler whoami --json` -> authenticated; `npx wrangler secret list --config "wrangler.toml"` -> `Worker "minsk-smart-groceries-bot" not found`
+Следующий шаг: Добавить GitHub secrets `TURSO_URL` и `TURSO_AUTH_TOKEN`, затем выполнить первый `wrangler deploy` и после него задать Worker secrets.

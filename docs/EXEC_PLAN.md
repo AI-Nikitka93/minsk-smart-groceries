@@ -13,3 +13,4 @@ Status legend: `TODO | IN_PROGRESS | DONE | BLOCKED | CANCELLED`
 9. `DONE` Implement Telegram bot-worker webhook with Turso search, native Telegram Bot API calls, and Groq-backed assistant replies.
 10. `TODO` Add Wrangler bindings, webhook secret wiring, and local bot-worker smoke test for message and inline flows.
 11. `DONE` Publish the codebase as a public GitHub repository with Apache-2.0 license and bilingual README files.
+12. `DONE` Add deploy scaffolding for Cloudflare bot-worker and GitHub Actions parser-worker execution.

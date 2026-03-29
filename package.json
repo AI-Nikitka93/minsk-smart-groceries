@@ -1,0 +1,25 @@
+{
+  "name": "minsk-smart-groceries",
+  "version": "0.1.0",
+  "private": false,
+  "description": "Smart Grocery Assistant for Minsk: Telegram bot, parser worker, and Turso-backed price intelligence.",
+  "author": "AI_Nikitka93",
+  "license": "Apache-2.0",
+  "packageManager": "npm@10.9.4",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "parser:run": "ts-node src/apps/parser-worker/cli.ts",
+    "deploy:bot": "wrangler deploy"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.15.15",
+    "drizzle-orm": "^0.44.7"
+  },
+  "devDependencies": {
+    "@types/node": "^24.6.0",
+    "drizzle-kit": "^0.31.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.44.0"
+  }
+}

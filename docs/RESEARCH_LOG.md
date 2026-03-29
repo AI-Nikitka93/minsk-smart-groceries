@@ -149,3 +149,15 @@ _Последнее обновление: 2026-03-29 | Роль: P-BOT Universal
 - https://core.telegram.org/bots/api-changelog
 - https://console.groq.com/docs/text-chat
 - https://console.groq.com/docs/api-reference
+
+## [ТЕМА: Cloudflare bot deploy + GitHub Actions parser cron]
+_Последнее обновление: 2026-03-29 | Роль: P-DEPLOY Autonomous Server & Hosting Manager_
+Статус: Актуально
+
+- Локальный `wrangler deploy --help` подтверждает актуальные флаги `--config`, `--outdir` и `--dry-run`, поэтому `wrangler.toml` можно безопасно валидировать без реального деплоя.
+- Локальный `wrangler deploy --config wrangler.toml --dry-run --outdir .wrangler-build` успешно собрал `bot-worker`, а в выводе были распознаны `BOT_USERNAME`, `TELEGRAM_WEBHOOK_PATH` и `BUILD_DATE_UTC` как bindings из `wrangler.toml`.
+- Официальный `actions/setup-node` README на момент проверки использует `actions/setup-node@v6`; README также рекомендует явно задавать версию Node и не полагаться на системную.
+- Вывод: infra path можно строить на `wrangler.toml` для bot-worker и на hourly GitHub Actions workflow с `npm install` + `npx ts-node` для parser CLI.
+
+Источники:
+- https://github.com/actions/setup-node

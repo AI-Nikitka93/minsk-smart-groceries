@@ -1,0 +1,22 @@
+name = "minsk-smart-groceries-bot"
+main = "src/apps/bot-worker/index.ts"
+compatibility_date = "2026-03-29"
+workers_dev = true
+
+[observability.logs]
+enabled = true
+
+[vars]
+BOT_USERNAME = "AI_Nikitka93_bot"
+TELEGRAM_WEBHOOK_PATH = "/webhook"
+BUILD_DATE_UTC = "2026-03-29T00:00:00Z"
+
+# Required secrets for bot-worker deployment:
+# wrangler secret put BOT_TOKEN
+# wrangler secret put WEBHOOK_SECRET
+# wrangler secret put TURSO_DATABASE_URL
+# wrangler secret put TURSO_AUTH_TOKEN
+# wrangler secret put GROQ_API_KEY
+#
+# Optional secret override:
+# wrangler secret put GROQ_MODEL

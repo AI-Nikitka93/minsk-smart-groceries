@@ -1,0 +1,42 @@
+name: parser-worker
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: parser-worker-cron
+  cancel-in-progress: false
+
+jobs:
+  run-parser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+      PARSER_PAGE_SIZE: "24"
+      PARSER_LOCK_TTL_SECONDS: "840"
+      NODE_OPTIONS: --enable-source-maps
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Typecheck parser runtime
+        run: npm run typecheck
+
+      - name: Run parser shard
+        run: npx ts-node src/apps/parser-worker/cli.ts

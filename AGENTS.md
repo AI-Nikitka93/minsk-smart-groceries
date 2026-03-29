@@ -4,7 +4,7 @@
 Design and implement a 24/7 Telegram grocery assistant and promo channel for Minsk with zero monthly infrastructure budget.
 
 ## Current Stage
-Telegram bot webhook worker implementation on top of live-validated parsers, Turso schema, and repository layer.
+Infrastructure scaffold for deploying `bot-worker` on Cloudflare Workers and running `parser-worker` from GitHub Actions.
 
 ## Expected Stack
 - Runtime: TypeScript on Cloudflare Workers
@@ -21,11 +21,15 @@ Telegram bot webhook worker implementation on top of live-validated parsers, Tur
 - Russian README: `README.md`
 - English README: `README.en.md`
 - License: `LICENSE`
+- Cloudflare config: `wrangler.toml`
+- Node bootstrap: `package.json`, `tsconfig.json`
+- GitHub Actions workflow: `.github/workflows/parser.yml`
 - Parser adapters: `src/parsers/`
 - Database schema: `src/db/schema.ts`
 - Database repositories: `src/db/repositories.ts`
 - Bot worker: `src/apps/bot-worker/index.ts`
 - Parser worker: `src/apps/parser-worker/index.ts`
+- Parser CLI adapter: `src/apps/parser-worker/cli.ts`
 - Drizzle config: `drizzle.config.ts`
 - Store API notes: `docs/api_map.md`
 - Project memory: `docs/`

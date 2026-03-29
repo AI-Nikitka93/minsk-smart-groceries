@@ -1,16 +1,24 @@
 {
   "current_goal": "Move from approved architecture to deployable parser and Telegram bot workers for Smart Grocery Assistant.",
-  "current_task": "Parser ingestion, Turso schema, repository layer, first Telegram webhook worker, and the public GitHub repository are in place.",
+  "current_task": "Parser ingestion, Turso schema, bot/parser workers, public GitHub repo, and first deployment scaffolding are in place.",
   "status": "IN_PROGRESS",
   "active_step": "docs/EXEC_PLAN.md step 10",
-  "next_step": "Add Wrangler bindings/config, then run local smoke tests for scheduled parser execution and Telegram webhook flows.",
-  "blockers": [],
+  "next_step": "Add real Cloudflare/GitHub secrets, deploy the bot worker once, then run live smoke tests for scheduled parser execution and Telegram webhook flows.",
+  "blockers": [
+    "GitHub Actions secrets are missing for parser workflow.",
+    "Cloudflare worker minsk-smart-groceries-bot has not been deployed yet, so remote Worker secrets cannot be listed."
+  ],
   "artifacts": [
     "drizzle.config.ts",
     "src/db/schema.ts",
     "src/db/repositories.ts",
     "src/apps/bot-worker/index.ts",
     "src/apps/parser-worker/index.ts",
+    "src/apps/parser-worker/cli.ts",
+    "wrangler.toml",
+    ".github/workflows/parser.yml",
+    "package.json",
+    "tsconfig.json",
     "src/parsers/types.ts",
     "src/parsers/shared.ts",
     "src/parsers/green.ts",
@@ -20,5 +28,5 @@
     "docs/api_map.md",
     "docs/RESEARCH_LOG.md"
   ],
-  "updated_at": "2026-03-29 19:59"
+  "updated_at": "2026-03-29 20:36"
 }

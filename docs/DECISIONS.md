@@ -59,3 +59,8 @@
 - Decision: Publish the project as a public GitHub repository with Apache License 2.0, plus Russian and English README files that name the author as `AI_Nikitka93`.
 - Why: The project now needs a public collaboration surface while keeping explicit legal terms, copyright notice, and clear entry documentation for both Russian- and English-speaking readers.
 - Impact: Public metadata, licensing, and future contributor-facing documentation must stay synchronized with runtime architecture and deployment status.
+
+## 2026-03-29 - Keep bot on Cloudflare Workers, but run parser cron on GitHub Actions
+- Decision: Deploy only `bot-worker` through Cloudflare Wrangler and run `parser-worker` from GitHub Actions via a Node.js CLI adapter.
+- Why: The parser was originally shaped around Cloudflare scheduled handlers, but the current delivery target explicitly splits webhook serving and parser cron, while public GitHub Actions provides a zero-cost hourly runner path.
+- Impact: `src/apps/parser-worker/cli.ts` becomes the bridge for local/CI cron execution, and parser secrets are stored in GitHub Actions rather than Cloudflare bindings.
