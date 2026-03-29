@@ -1,0 +1,22 @@
+# Current State
+
+- Goal: Move from approved architecture to deployable parser and Telegram bot workers for Smart Grocery Assistant.
+- Current task: Parser ingestion, Turso schema, repository layer, and the first Telegram webhook worker are implemented on Cloudflare Workers.
+- Status: IN_PROGRESS
+- Active step: `docs/EXEC_PLAN.md` step 10
+- Next step: Add Wrangler bindings/config, then run local smoke tests for scheduled parser execution and Telegram webhook flows.
+- Blockers: None.
+- Artifacts:
+  - `drizzle.config.ts`
+  - `src/db/schema.ts`
+  - `src/db/repositories.ts`
+  - `src/apps/bot-worker/index.ts`
+  - `src/apps/parser-worker/index.ts`
+  - `src/parsers/types.ts`
+  - `src/parsers/shared.ts`
+  - `src/parsers/green.ts`
+  - `src/parsers/edostavka.ts`
+  - `src/parsers/gippo.ts`
+  - `src/parsers/emall.ts`
+  - `docs/api_map.md`
+  - `docs/RESEARCH_LOG.md`
