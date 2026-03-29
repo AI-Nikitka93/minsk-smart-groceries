@@ -1,12 +1,12 @@
 # Current State
 
 - Goal: Move from approved architecture to deployable parser and Telegram bot workers for Smart Grocery Assistant.
-- Current task: `bot-worker` runs through an LLM-first tool-loop and now has a second basket hardening checkpoint: basket assembly filters out obvious junk categories (`корм`, `семена`, `сюрпризы`, `пюре`, `приправы`) and uses more concrete grocery anchors for fallback baskets.
+- Current task: `bot-worker` runs through an LLM-first tool-loop and now has a third basket hardening checkpoint: basket assembly rejects tiny seed packs (`0.5 г`, `F1`), avoids duplicate family picks, and uses broader protein anchors like `фарш` instead of over-specific empty queries.
 - Status: IN_PROGRESS
 - Active step: `docs/EXEC_PLAN.md` step 13
-- Next step: Run live Telegram retest on basket flows (`собери корзину на 3 дня`, `собери корзину на неделю при диабете`) against version `2042c0f0-85c1-4977-9505-ca853810725e`; if basket quality is finally acceptable, close step 13 and harden tool contracts in step 14.
+- Next step: Run live Telegram retest on basket flows (`собери корзину на 3 дня`, `собери корзину на неделю при диабете`) against version `f95e096f-1f9e-4023-ab05-da3721b600d3`; if basket quality is finally acceptable, close step 13 and harden tool contracts in step 14.
 - Blockers:
-  - Live user retest after the second basket hardening checkpoint is still pending, so the tool-loop is deployed and smoke-tested but not yet proven by real user chat logs.
+  - Live user retest after the third basket hardening checkpoint is still pending, so the tool-loop is deployed and smoke-tested but not yet proven by real user chat logs.
   - Parsed catalog coverage is too weak for several staple commodity terms (`масло`, `молоко`, `торт`, `гречка`), which limits downstream planner quality.
 - Artifacts:
   - `.env.operator.local` (local ignored secret intake file)

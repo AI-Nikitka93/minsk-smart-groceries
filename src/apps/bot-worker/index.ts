@@ -2649,20 +2649,20 @@ function mergeProfilePatch(
 
 function buildFallbackBasketQueries(intent: SearchIntent): string[] {
   const base = intent.wantsHealthy || intent.wantsDiagnosisAdvice
-    ? ["крупа гречневая", "хлопья овсяные", "фарш куриный", "капуста белокочанная", "огурец гладкий", "банан"]
-    : ["крупа гречневая", "макароны", "фарш куриный", "капуста белокочанная", "огурец гладкий", "хлебцы"];
+    ? ["крупа гречневая", "хлопья овсяные", "фарш", "капуста белокочанная", "огурец гладкий", "банан"]
+    : ["крупа гречневая", "макароны", "фарш", "капуста белокочанная", "огурец гладкий", "хлебцы"];
 
   const withDietBias = [...base];
   if (intent.diagnosisContext.keys.includes("diabetes")) {
-    return ["крупа гречневая", "хлопья овсяные", "фарш куриный", "капуста белокочанная", "огурец гладкий", "банан"];
+    return ["крупа гречневая", "хлопья овсяные", "фарш", "капуста белокочанная", "огурец гладкий", "банан"];
   }
 
   if (intent.diagnosisContext.keys.includes("lactose_intolerance")) {
-    return ["крупа гречневая", "рис", "фарш куриный", "капуста белокочанная", "огурец гладкий", "яблоко"];
+    return ["крупа гречневая", "рис", "фарш", "капуста белокочанная", "огурец гладкий", "яблоко"];
   }
 
   if (intent.diagnosisContext.keys.includes("gastritis")) {
-    return ["хлопья овсяные", "рис", "крупа гречневая", "фарш куриный", "банан", "капуста белокочанная"];
+    return ["хлопья овсяные", "рис", "крупа гречневая", "фарш", "банан", "капуста белокочанная"];
   }
 
   return withDietBias;
@@ -3130,7 +3130,7 @@ function assembleBudgetBasket(
       continue;
     }
 
-    if (familyAlreadyUsed && picked.length >= 3) {
+    if (familyAlreadyUsed) {
       continue;
     }
 
@@ -3183,6 +3183,10 @@ function shouldRejectBasketCandidate(row: AssistantProductRow, intent: SearchInt
     return true;
   }
 
+  if (looksLikeTinySeedPack(row.title)) {
+    return true;
+  }
+
   const hasLowSignalHint = [...LOW_SIGNAL_BASKET_HINTS].some((hint) => haystack.includes(hint));
   const isPreparedFood = tokenizeWords(row.title).some((token) => PREPARED_FOOD_HINTS.has(token));
 
@@ -3195,6 +3199,21 @@ function shouldRejectBasketCandidate(row: AssistantProductRow, intent: SearchInt
   }
 
   return hasLowSignalHint;
+}
+
+function looksLikeTinySeedPack(title: string): boolean {
+  const normalized = normalizeQuery(title);
+  if (/\bf1\b/u.test(normalized)) {
+    return true;
+  }
+
+  const weightMatch = normalized.match(/(\d+(?:[.,]\d+)?)\s*г\b/u);
+  if (!weightMatch) {
+    return false;
+  }
+
+  const grams = Number(weightMatch[1].replace(",", "."));
+  return Number.isFinite(grams) && grams > 0 && grams < 20;
 }
 
 function assessBasketQuality(
