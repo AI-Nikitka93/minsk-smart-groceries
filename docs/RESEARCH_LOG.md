@@ -206,3 +206,17 @@ _Последнее обновление: 2026-03-30 | Роль: P-BOT Universal
 - https://console.groq.com/docs/tool-use/overview
 - https://developers.cloudflare.com/workers/platform/limits/
 - https://developers.cloudflare.com/workers/platform/pricing/
+
+## [ТЕМА: March 2026 agentic bot implementation path with Groq tools]
+_Последнее обновление: 2026-03-30 | Роль: P-BOT Universal Bot Architect_
+Статус: Актуально
+
+- Официальная страница Groq `Local Tool Calling` подтверждает базовый orchestration loop: model call with tool schemas -> check `tool_calls` -> execute tool -> append `role=tool` result -> final model response.
+- В той же документации Groq явно показывает multi-turn agentic loop и рекомендует ограничивать число итераций, а не делать бесконечный цикл.
+- Документация Groq отдельно описывает ошибки invalid tool call и рекомендует retry strategy с более низкой temperature, если модель сгенерировала плохой tool object.
+- OpenRouter official docs подтверждают строгие Structured Outputs через `response_format: { type: \"json_schema\" }`, что полезно для будущего hardening contract-layer, но для текущего bot-worker local tool calling на Groq уже достаточно для первого agentic checkpoint.
+- Вывод: правильная текущая реализация для бота — не ещё один большой prompt с эвристиками, а короткий Groq tool loop поверх Turso, с лимитом итераций и fallback на детерминированный ответ.
+
+Источники:
+- https://console.groq.com/docs/tool-use/local-tool-calling
+- https://openrouter.ai/docs/guides/features/structured-outputs

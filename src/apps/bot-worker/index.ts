@@ -305,11 +305,31 @@ interface GroqChatCompletionResponse {
   choices?: Array<{
     message?: {
       content?: string | null;
+      role?: "assistant";
+      tool_calls?: GroqToolCall[];
     };
+    finish_reason?: string | null;
   }>;
   error?: {
     message?: string;
   };
+}
+
+interface GroqToolCall {
+  id: string;
+  type: "function";
+  function: {
+    name: string;
+    arguments: string;
+  };
+}
+
+interface GroqChatMessage {
+  role: "system" | "user" | "assistant" | "tool";
+  content?: string;
+  tool_call_id?: string;
+  name?: string;
+  tool_calls?: GroqToolCall[];
 }
 
 interface AssistantProductRow {
@@ -381,6 +401,20 @@ interface PersistedUserProfile {
   allergies: string[];
   diagnoses: string[];
   healthGoals: string[];
+}
+
+interface AgenticReply {
+  text: string;
+  parseMode?: string;
+  replyMarkup?: Record<string, unknown>;
+}
+
+interface AgenticToolOutcome {
+  name: string;
+  payload: Record<string, unknown>;
+  updatedProfile?: PersistedUserProfile | null;
+  replyMarkup?: Record<string, unknown>;
+  parseMode?: string;
 }
 
 let cachedDatabase: ReturnType<typeof createDatabase> | null = null;
@@ -479,6 +513,18 @@ async function handleMessage(message: TelegramMessage, env: BotWorkerEnv): Promi
 
   const db = getDatabase(env);
   const persistedProfile = message.from ? await getPersistedUserProfile(db, message.from) : null;
+  const agenticReply = await runAgenticAssistant(env, db, message, persistedProfile);
+  if (agenticReply) {
+    await sendTelegramText(
+      env,
+      message.chat.id,
+      agenticReply.text,
+      agenticReply.replyMarkup,
+      agenticReply.parseMode,
+    );
+    return;
+  }
+
   let queryForSearch = text;
   let intent = buildSearchIntent(queryForSearch, persistedProfile);
   let plan = await planUserRequestWithGroq(env, text, intent, persistedProfile);
@@ -570,6 +616,551 @@ async function handleMessage(message: TelegramMessage, env: BotWorkerEnv): Promi
     undefined,
     shouldUseMarkdownReply(intent) ? "Markdown" : undefined,
   );
+}
+
+async function runAgenticAssistant(
+  env: BotWorkerEnv,
+  db: ReturnType<typeof createDatabase>,
+  message: TelegramMessage,
+  persistedProfile: PersistedUserProfile | null,
+): Promise<AgenticReply | null> {
+  const userQuery = message.text?.trim();
+  if (!userQuery) {
+    return null;
+  }
+
+  const tools = buildAgentToolSchemas();
+  const messages: GroqChatMessage[] = [
+    {
+      role: "system",
+      content: [
+        "Ты главный AI-ассистент продуктового Telegram-бота для Минска.",
+        "Твоя задача: понять сообщение пользователя и СНАЧАЛА вызвать подходящий инструмент, а уже потом отвечать.",
+        "Не выдумывай товары, цены, составы, скидки, ссылки, профиль пользователя или диагнозы.",
+        "Если пользователь сообщает предпочтения, бюджет, аллергию или диагноз, используй tool save_user_profile.",
+        "Если пользователь спрашивает, где дешевле товар, используй tool find_cheapest_offer.",
+        "Если пользователь просит обычный поиск товара или ссылки, используй tool search_products.",
+        "Если пользователь просит корзину, используй tool build_budget_basket.",
+        "Если пользователь спрашивает, что можно при диагнозе или хочет безопасный/здоровый вариант, используй tool analyze_composition.",
+        "Если инструмент сообщает, что точного товара нет или корзина слабая, не притворяйся умным: честно попроси одно уточнение.",
+        "Отвечай только по-русски.",
+        "Формат ответа: короткий заголовок, затем список или 1-2 абзаца.",
+        "Для товаров обязательно указывай цену, магазин и прямую ссылку.",
+        "Используй Telegram Markdown, но без сложных конструкций.",
+      ].join(" "),
+    },
+    {
+      role: "user",
+      content: JSON.stringify(
+        {
+          query: userQuery,
+          currentProfile: serializeProfileForModel(persistedProfile),
+        },
+        null,
+        2,
+      ),
+    },
+  ];
+
+  let currentProfile = persistedProfile;
+  let lastToolOutcome: AgenticToolOutcome | null = null;
+
+  try {
+    for (let iteration = 0; iteration < 4; iteration += 1) {
+      const response = await callGroqWithTools(env, messages, tools);
+      const assistantMessage = response.choices?.[0]?.message;
+      if (!assistantMessage) {
+        return lastToolOutcome ? buildAgenticFallbackReply(lastToolOutcome) : null;
+      }
+
+      messages.push({
+        role: "assistant",
+        content: assistantMessage.content ?? undefined,
+        tool_calls: assistantMessage.tool_calls,
+      });
+
+      const toolCalls = assistantMessage.tool_calls ?? [];
+      if (toolCalls.length === 0) {
+        const finalText = assistantMessage.content?.trim();
+        if (finalText && lastToolOutcome) {
+          return {
+            text: finalText,
+            parseMode: lastToolOutcome?.parseMode ?? "Markdown",
+            replyMarkup: lastToolOutcome?.replyMarkup,
+          };
+        }
+
+        return lastToolOutcome ? buildAgenticFallbackReply(lastToolOutcome) : null;
+      }
+
+      for (const toolCall of toolCalls) {
+        const outcome = await executeAgentToolCall(
+          env,
+          db,
+          toolCall,
+          message.from ?? null,
+          currentProfile,
+          userQuery,
+        );
+        if (outcome.updatedProfile) {
+          currentProfile = outcome.updatedProfile;
+        }
+        lastToolOutcome = outcome;
+
+        messages.push({
+          role: "tool",
+          tool_call_id: toolCall.id,
+          name: toolCall.function.name,
+          content: JSON.stringify(outcome.payload, null, 2),
+        });
+      }
+    }
+  } catch (error) {
+    console.error("Agentic assistant failed; falling back to legacy flow", error);
+    return lastToolOutcome ? buildAgenticFallbackReply(lastToolOutcome) : null;
+  }
+
+  return lastToolOutcome ? buildAgenticFallbackReply(lastToolOutcome) : null;
+}
+
+function buildAgentToolSchemas(): Record<string, unknown>[] {
+  return [
+    {
+      type: "function",
+      function: {
+        name: "save_user_profile",
+        description: "Сохраняет бюджет, диагнозы, аллергии, исключаемые ингредиенты и другие постоянные предпочтения пользователя.",
+        parameters: {
+          type: "object",
+          properties: {
+            budgetRub: { type: ["number", "null"] },
+            preferredStores: { type: "array", items: { type: "string" } },
+            excludedIngredients: { type: "array", items: { type: "string" } },
+            allergies: { type: "array", items: { type: "string" } },
+            diagnoses: { type: "array", items: { type: "string" } },
+            healthGoals: { type: "array", items: { type: "string" } },
+          },
+          additionalProperties: false,
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "search_products",
+        description: "Ищет реальные товары по базе, когда пользователь просит найти продукт, варианты, ссылки или показать что есть.",
+        parameters: {
+          type: "object",
+          properties: {
+            productQuery: { type: "string" },
+            limit: { type: "number" },
+            healthy: { type: "boolean" },
+            diagnosisAware: { type: "boolean" },
+          },
+          required: ["productQuery"],
+          additionalProperties: false,
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "find_cheapest_offer",
+        description: "Находит только точные предложения для сценария 'где дешевле купить X'. Если точного совпадения нет, сообщает об этом.",
+        parameters: {
+          type: "object",
+          properties: {
+            productQuery: { type: "string" },
+            limit: { type: "number" },
+          },
+          required: ["productQuery"],
+          additionalProperties: false,
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "build_budget_basket",
+        description: "Собирает корзину под бюджет и ограничения. Если подборка слабая или мусорная, возвращает просьбу уточнить основу корзины.",
+        parameters: {
+          type: "object",
+          properties: {
+            budgetRub: { type: ["number", "null"] },
+            durationDays: { type: ["number", "null"] },
+            productQueries: { type: "array", items: { type: "string" } },
+            healthy: { type: "boolean" },
+            diagnosisAware: { type: "boolean" },
+          },
+          additionalProperties: false,
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "analyze_composition",
+        description: "Подбирает товары для здорового/безопасного питания с учётом диагноза, состава и ограничений пользователя.",
+        parameters: {
+          type: "object",
+          properties: {
+            productQuery: { type: "string" },
+            limit: { type: "number" },
+          },
+          required: ["productQuery"],
+          additionalProperties: false,
+        },
+      },
+    },
+  ];
+}
+
+async function callGroqWithTools(
+  env: BotWorkerEnv,
+  messages: GroqChatMessage[],
+  tools: Record<string, unknown>[],
+): Promise<GroqChatCompletionResponse> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort("Groq tool call timeout"), GROQ_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(GROQ_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${env.GROQ_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: env.GROQ_MODEL ?? DEFAULT_GROQ_MODEL,
+        temperature: 0.2,
+        max_completion_tokens: 800,
+        tool_choice: "auto",
+        tools,
+        messages,
+      }),
+      signal: controller.signal,
+    });
+
+    const payload = (await response.json()) as GroqChatCompletionResponse;
+    if (!response.ok) {
+      throw new Error(`Groq tool call ${response.status}: ${payload.error?.message ?? JSON.stringify(payload)}`);
+    }
+
+    return payload;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function executeAgentToolCall(
+  env: BotWorkerEnv,
+  db: ReturnType<typeof createDatabase>,
+  toolCall: GroqToolCall,
+  telegramUser: TelegramUser | null,
+  profile: PersistedUserProfile | null,
+  userQuery: string,
+): Promise<AgenticToolOutcome> {
+  const args = parseToolArguments(toolCall.function.arguments);
+
+  switch (toolCall.function.name) {
+    case "save_user_profile":
+      return executeSaveUserProfileTool(db, telegramUser, profile, args);
+    case "search_products":
+      return executeSearchProductsTool(db, profile, args);
+    case "find_cheapest_offer":
+      return executeFindCheapestTool(db, profile, args);
+    case "build_budget_basket":
+      return executeBuildBasketTool(db, profile, userQuery, args);
+    case "analyze_composition":
+      return executeAnalyzeCompositionTool(db, profile, args);
+    default:
+      return {
+        name: toolCall.function.name,
+        payload: {
+          status: "error",
+          message: `Unknown tool: ${toolCall.function.name}`,
+        },
+      };
+  }
+}
+
+function parseToolArguments(rawArguments: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(rawArguments);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch (error) {
+    console.error("Failed to parse tool arguments", error, rawArguments);
+  }
+
+  return {};
+}
+
+async function executeSaveUserProfileTool(
+  db: ReturnType<typeof createDatabase>,
+  telegramUser: TelegramUser | null,
+  profile: PersistedUserProfile | null,
+  args: Record<string, unknown>,
+): Promise<AgenticToolOutcome> {
+  const patch = normalizeProfilePatch({
+    budgetRub: typeof args.budgetRub === "number" ? args.budgetRub : null,
+    preferredStores: Array.isArray(args.preferredStores) ? (args.preferredStores as string[]) : [],
+    excludedIngredients: Array.isArray(args.excludedIngredients) ? (args.excludedIngredients as string[]) : [],
+    allergies: Array.isArray(args.allergies) ? (args.allergies as string[]) : [],
+    diagnoses: Array.isArray(args.diagnoses) ? (args.diagnoses as string[]) : [],
+    healthGoals: Array.isArray(args.healthGoals) ? (args.healthGoals as string[]) : [],
+  });
+
+  if (!telegramUser || !patch) {
+    const fallbackProfile = profile ?? null;
+    return {
+      name: "save_user_profile",
+      payload: {
+        status: "noop",
+        profile: serializeProfileForModel(fallbackProfile),
+        fallbackText: buildProfileSavedMessage(fallbackProfile),
+      },
+      updatedProfile: fallbackProfile,
+    };
+  }
+
+  const updatedProfile = await upsertPersistedUserProfile(db, telegramUser, patch, profile);
+  return {
+    name: "save_user_profile",
+    payload: {
+      status: "ok",
+      profile: serializeProfileForModel(updatedProfile),
+      fallbackText: buildProfileSavedMessage(updatedProfile),
+    },
+    updatedProfile,
+  };
+}
+
+async function executeSearchProductsTool(
+  db: ReturnType<typeof createDatabase>,
+  profile: PersistedUserProfile | null,
+  args: Record<string, unknown>,
+): Promise<AgenticToolOutcome> {
+  const productQuery = typeof args.productQuery === "string" ? args.productQuery.trim() : "";
+  const limit = clampToolLimit(args.limit);
+  const healthy = args.healthy === true;
+  const diagnosisAware = args.diagnosisAware === true;
+  const intent = {
+    ...buildSearchIntent(productQuery, profile),
+    wantsHealthy: healthy || buildSearchIntent(productQuery, profile).wantsHealthy,
+    wantsDiagnosisAdvice: diagnosisAware || buildSearchIntent(productQuery, profile).wantsDiagnosisAdvice,
+  };
+  const plan: BotRequestPlan = {
+    action: diagnosisAware || healthy ? "diagnosis_safe" : "search",
+    catalogQueries: [productQuery],
+    budgetMinor: intent.budgetMinor,
+    needsHealthy: intent.wantsHealthy,
+    needsDiagnosisAdvice: intent.wantsDiagnosisAdvice,
+    compareCheapest: false,
+    wantsBasket: false,
+    profileOnly: false,
+    responseMode: "assistant",
+  };
+  const products = productQuery ? await searchProductsForPlan(db, plan, intent) : [];
+
+  return {
+    name: "search_products",
+    payload: {
+      status: products.length > 0 ? "ok" : "no_results",
+      query: productQuery,
+      products: products.slice(0, limit).map(serializeProductForModel),
+      fallbackText:
+        products.length > 0
+          ? buildDirectProductReply(productQuery, products.slice(0, limit), intent)
+          : buildNoResultsMessage(productQuery),
+    },
+    replyMarkup: products.length > 0 ? undefined : buildNoResultsKeyboard(),
+  };
+}
+
+async function executeFindCheapestTool(
+  db: ReturnType<typeof createDatabase>,
+  profile: PersistedUserProfile | null,
+  args: Record<string, unknown>,
+): Promise<AgenticToolOutcome> {
+  const productQuery = typeof args.productQuery === "string" ? args.productQuery.trim() : "";
+  const limit = clampToolLimit(args.limit);
+  const intent = buildSearchIntent(productQuery, profile);
+  const plan: BotRequestPlan = {
+    action: "find_cheapest",
+    catalogQueries: [productQuery],
+    budgetMinor: null,
+    needsHealthy: false,
+    needsDiagnosisAdvice: intent.wantsDiagnosisAdvice,
+    compareCheapest: true,
+    wantsBasket: false,
+    profileOnly: false,
+    responseMode: "assistant",
+  };
+  const products = productQuery ? await searchProductsForPlan(db, plan, intent) : [];
+
+  return {
+    name: "find_cheapest_offer",
+    payload: {
+      status: products.length > 0 ? "ok" : "needs_clarification",
+      query: productQuery,
+      exactMatchFound: products.length > 0,
+      products: products.slice(0, limit).map(serializeProductForModel),
+      fallbackText:
+        products.length > 0
+          ? buildCheapestReply(productQuery, products.slice(0, limit), intent)
+          : buildCheapestMissMessage(productQuery, intent.searchTerms),
+    },
+    replyMarkup: products.length > 0 ? undefined : buildCheapestMissKeyboard(intent.searchTerms),
+  };
+}
+
+async function executeBuildBasketTool(
+  db: ReturnType<typeof createDatabase>,
+  profile: PersistedUserProfile | null,
+  userQuery: string,
+  args: Record<string, unknown>,
+): Promise<AgenticToolOutcome> {
+  const rawQueries = Array.isArray(args.productQueries) ? normalizeStringList(args.productQueries as string[]) : [];
+  const durationDays = typeof args.durationDays === "number" && Number.isFinite(args.durationDays) ? args.durationDays : null;
+  const baseIntent = buildSearchIntent(rawQueries.join(" "), profile);
+  const budgetMinor =
+    typeof args.budgetRub === "number" && Number.isFinite(args.budgetRub) && args.budgetRub > 0
+      ? Math.round(args.budgetRub * 100)
+      : baseIntent.budgetMinor;
+  const intent: SearchIntent = {
+    ...baseIntent,
+    budgetMinor,
+    wantsBasket: true,
+    wantsHealthy: args.healthy === true || baseIntent.wantsHealthy,
+    wantsDiagnosisAdvice: args.diagnosisAware === true || baseIntent.wantsDiagnosisAdvice,
+  };
+  const queries = rawQueries.length > 0 ? rawQueries : buildFallbackBasketQueries(intent);
+  const plan: BotRequestPlan = {
+    action: "build_basket",
+    catalogQueries: queries,
+    budgetMinor,
+    needsHealthy: intent.wantsHealthy,
+    needsDiagnosisAdvice: intent.wantsDiagnosisAdvice,
+    compareCheapest: false,
+    wantsBasket: true,
+    profileOnly: false,
+    responseMode: "assistant",
+  };
+  const products = await searchProductsForPlan(db, plan, intent);
+  const basket = assembleBudgetBasket(products, budgetMinor, intent);
+
+  return {
+    name: "build_budget_basket",
+    payload: {
+      status: basket.reliable ? "ok" : "needs_clarification",
+      query: userQuery,
+      durationDays,
+      budgetRub: budgetMinor !== null ? Number((budgetMinor / 100).toFixed(2)) : null,
+      productQueries: queries,
+      products: basket.items.map(serializeProductForModel),
+      reason: basket.reason,
+      fallbackText: basket.reliable
+        ? buildBasketReply(userQuery, basket.items, budgetMinor, intent)
+        : buildBasketFollowUpMessage(userQuery, basket.reason),
+    },
+  };
+}
+
+async function executeAnalyzeCompositionTool(
+  db: ReturnType<typeof createDatabase>,
+  profile: PersistedUserProfile | null,
+  args: Record<string, unknown>,
+): Promise<AgenticToolOutcome> {
+  const productQuery = typeof args.productQuery === "string" ? args.productQuery.trim() : "";
+  const limit = clampToolLimit(args.limit);
+  const baseIntent = buildSearchIntent(productQuery, profile);
+  const intent: SearchIntent = {
+    ...baseIntent,
+    wantsHealthy: true,
+    wantsDiagnosisAdvice: true,
+  };
+  const plan: BotRequestPlan = {
+    action: "diagnosis_safe",
+    catalogQueries: productQuery ? [productQuery] : [],
+    budgetMinor: intent.budgetMinor,
+    needsHealthy: true,
+    needsDiagnosisAdvice: true,
+    compareCheapest: false,
+    wantsBasket: false,
+    profileOnly: false,
+    responseMode: "assistant",
+  };
+  const products = productQuery ? await searchProductsForPlan(db, plan, intent) : [];
+
+  return {
+    name: "analyze_composition",
+    payload: {
+      status: products.length > 0 ? "ok" : "needs_clarification",
+      query: productQuery,
+      diagnoses: intent.diagnosisContext.labels,
+      products: products.slice(0, limit).map((product) => ({
+        ...serializeProductForModel(product),
+        reasons: buildSuitabilityReason(product, intent),
+      })),
+      fallbackText:
+        products.length > 0
+          ? buildFallbackAssistantReply(productQuery || "подбери безопасные варианты", products.slice(0, limit), intent, plan)
+          : buildNoResultsMessage(productQuery || "здоровое питание"),
+    },
+    replyMarkup: products.length > 0 ? undefined : buildNoResultsKeyboard(),
+  };
+}
+
+function clampToolLimit(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.max(1, Math.min(8, Math.round(value)));
+  }
+
+  return 5;
+}
+
+function serializeProductForModel(product: AssistantProductRow): Record<string, unknown> {
+  return {
+    title: product.title,
+    store: product.storeName,
+    priceRub: formatMinorUnits(product.priceMinor),
+    oldPriceRub: formatMinorUnits(product.oldPriceMinor),
+    discountPercent: product.discountPercent,
+    available: product.available,
+    composition: product.compositionText,
+    url: product.url,
+    matchKind: product.matchKind ?? null,
+    matchScore: product.matchScore ?? null,
+  };
+}
+
+function serializeProfileForModel(profile: PersistedUserProfile | null): Record<string, unknown> | null {
+  if (!profile) {
+    return null;
+  }
+
+  return {
+    budgetRub: profile.budgetMinor !== null ? Number((profile.budgetMinor / 100).toFixed(2)) : null,
+    preferredStores: profile.preferredStores,
+    excludedIngredients: profile.excludedIngredients,
+    allergies: profile.allergies,
+    diagnoses: profile.diagnoses,
+    healthGoals: profile.healthGoals,
+  };
+}
+
+function buildAgenticFallbackReply(outcome: AgenticToolOutcome): AgenticReply {
+  const fallbackText = typeof outcome.payload.fallbackText === "string"
+    ? outcome.payload.fallbackText
+    : "Я собрал данные, но не смог красиво сформулировать ответ. Попробуйте уточнить запрос.";
+
+  return {
+    text: fallbackText,
+    parseMode: outcome.parseMode,
+    replyMarkup: outcome.replyMarkup,
+  };
 }
 
 async function handleInlineQuery(query: TelegramInlineQuery, env: BotWorkerEnv): Promise<void> {

@@ -84,3 +84,8 @@
 - Decision: During Stabilization Sprint, `find_cheapest` must return only strict product matches, profile-only messages must short-circuit into confirmation, basket assembly must refuse low-quality selections, and Telegram Markdown errors must retry as plain text.
 - Why: Live user logs showed that loose matches and silent formatting failures were more damaging than a narrower but honest answer.
 - Impact: The bot may ask for уточнение more often, but it will stop presenting croissants as butter, stop swallowing profile updates, and stop shipping nonsense baskets as if they were valid shopping help.
+
+## 2026-03-30 - Shift the bot to LLM-first tool orchestration
+- Decision: Route chat messages through a Groq tool loop first, with explicit tools for profile saving, product search, cheapest lookup, basket assembly, and composition-aware selection; keep the older hybrid flow only as fallback.
+- Why: The user explicitly wants the AI to decide what to do from free-form chat input, and the previous planner-plus-heuristics layer still felt fake-smart in live conversations.
+- Impact: Product intelligence is now grounded through tool execution rather than loose planner text, and future work should strengthen tool validation instead of adding more heuristics.

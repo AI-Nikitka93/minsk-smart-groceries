@@ -216,3 +216,10 @@
 Изменены файлы: AGENTS.md, src/apps/bot-worker/index.ts, docs/STATE.md, docs/state.json, docs/EXEC_PLAN.md, docs/DECISIONS.md, docs/PROJECT_HISTORY.md
 Результат/доказательство: `npm run typecheck` -> success; `rg -n "TODO|placeholder|insert code" "src/apps/bot-worker/index.ts"` -> only real Telegram `input_field_placeholder` matches; `npx wrangler deploy --config "wrangler.toml"` -> version `78bed658-a40d-4214-88f2-3278cb647831`; `GET /health` -> `ok: true`; synthetic webhook smoke-tests (`у меня диабет и бюджет 30 рублей`, `где дешевле купить масло`, `собери корзину на 3 дня`) -> `hookStatus 200`, `delta=2`
 Следующий шаг: Получить новый живой ретест в Telegram на `у меня диабет и бюджет 30 рублей`, `где дешевле купить масло`, `собери корзину на 3 дня`, затем решать step 14 с tool-contract layer.
+
+Дата и время: 2026-03-30 02:38
+Роль: P-BOT Universal Bot Architect
+Сделано: Переведён chat-flow на первый agentic checkpoint: `bot-worker` теперь сначала запускает Groq tool loop с инструментами `save_user_profile`, `search_products`, `find_cheapest_offer`, `build_budget_basket`, `analyze_composition`, а прежний planner/heuristic path оставлен только как аварийный fallback.
+Изменены файлы: AGENTS.md, src/apps/bot-worker/index.ts, docs/STATE.md, docs/state.json, docs/EXEC_PLAN.md, docs/DECISIONS.md, docs/RESEARCH_LOG.md, docs/PROJECT_HISTORY.md
+Результат/доказательство: `npm run typecheck` -> success; `npx wrangler deploy --config "wrangler.toml"` -> version `350782da-eded-44ad-a2dd-925c37a0a124`; `GET /health` -> `ok: true`; synthetic webhook smoke-tests (`у меня диабет и бюджет 30 рублей`, `где дешевле купить масло`, `собери корзину на 3 дня`) -> `hookStatus 200`, `delta=2`; research grounded in `console.groq.com/docs/tool-use/local-tool-calling`
+Следующий шаг: Получить живой пользовательский ретест по тем же трём запросам и затем либо закрыть step 13, либо углубить step 14 через более строгую schema validation и tool-result contracts.

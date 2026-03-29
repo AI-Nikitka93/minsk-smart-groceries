@@ -1,12 +1,12 @@
 # Current State
 
 - Goal: Move from approved architecture to deployable parser and Telegram bot workers for Smart Grocery Assistant.
-- Current task: Stabilization Sprint is in progress for `bot-worker`; the first remediation checkpoint is now deployed with profile-only confirmation, exact-match gating for `find_cheapest`, Telegram parse-mode fallback, and refusal of low-quality baskets.
+- Current task: `bot-worker` now runs through an LLM-first tool-loop checkpoint; Groq chooses between `save_user_profile`, `search_products`, `find_cheapest_offer`, `build_budget_basket`, and `analyze_composition`, while the old hybrid path remains only as fallback.
 - Status: IN_PROGRESS
 - Active step: `docs/EXEC_PLAN.md` step 13
-- Next step: Run live Telegram retest on profile update, `где дешевле`, and basket flows; if behavior is stable, continue with tool-contract layer from step 14.
+- Next step: Run live Telegram retest on profile update, `где дешевле`, and basket flows against the new agentic loop; if behavior is stable, close step 13 and harden tool contracts in step 14.
 - Blockers:
-  - Live user retest after the first stabilization checkpoint is still pending, so the fixes are type-checked and deployed but not yet proven by real chat logs.
+  - Live user retest after the new agentic checkpoint is still pending, so the tool-loop is deployed and smoke-tested but not yet proven by real user chat logs.
   - Parsed catalog coverage is too weak for several staple commodity terms (`масло`, `молоко`, `торт`, `гречка`), which limits downstream planner quality.
 - Artifacts:
   - `.env.operator.local` (local ignored secret intake file)

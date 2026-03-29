@@ -4,7 +4,7 @@
 Design and implement a 24/7 Telegram grocery assistant and promo channel for Minsk with zero monthly infrastructure budget.
 
 ## Current Stage
-Stabilization Sprint for `bot-worker`: exact product matching, profile persistence confirmation, safer basket assembly, and remediation checkpoints after live-user audit.
+Agentic stabilization sprint for `bot-worker`: Groq tool-loop over Turso with profile saving, product search, exact cheapest lookup, basket assembly, and safer fallbacks after live-user audit.
 
 ## Expected Stack
 - Runtime: TypeScript on Cloudflare Workers
