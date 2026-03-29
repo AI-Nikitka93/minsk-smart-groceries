@@ -230,3 +230,10 @@
 Изменены файлы: src/apps/bot-worker/index.ts, docs/STATE.md, docs/state.json, docs/PROJECT_HISTORY.md
 Результат/доказательство: `npm run typecheck` -> success; `npx wrangler deploy --config "wrangler.toml"` -> version `2477e9e1-5bfc-4c63-9ead-49138fbad330`; synthetic webhook smoke-test `собери корзину на 3 дня` -> `hookStatus 200`, `delta=2`
 Следующий шаг: Получить живой пользовательский ответ на `собери корзину на 3 дня` и `собери корзину на неделю при диабете`, затем решить, достаточно ли текущего basket-tool или нужен ещё category read-model.
+
+Дата и время: 2026-03-30 02:52
+Роль: P-BOT Universal Bot Architect
+Сделано: Выполнен второй basket-hardening checkpoint после DB probes: basket flow теперь жёстко вычищает мусорные категории (`корм`, `семена`, `сюрпризы`, `пюре`, `приправы`, маринады и т.п.), protein-family расширен на `фарш`, а fallback basket anchors переведены на более реальные товарные формы вроде `крупа гречневая`, `фарш куриный`, `капуста белокочанная`, `огурец гладкий`, `банан`.
+Изменены файлы: src/apps/bot-worker/index.ts, docs/STATE.md, docs/state.json, docs/PROJECT_HISTORY.md
+Результат/доказательство: DB probes showed noisy seeds (`яйцо` -> Kinder Surprise, `курица` -> cat food, `помидор` -> seeds); `npm run typecheck` -> success; `npx wrangler deploy --config "wrangler.toml"` -> version `2042c0f0-85c1-4977-9505-ca853810725e`; synthetic webhook smoke-tests `собери корзину на 3 дня` and `собери корзину на неделю при диабете` -> `hookStatus 200`, `delta=2`
+Следующий шаг: Получить новый живой Telegram ретест по двум basket-сценариям и решить, достаточно ли текущей очистки данных или уже нужен отдельный category read-model для корзин.

@@ -171,6 +171,25 @@ const LOW_SIGNAL_BASKET_HINTS = new Set([
   "шоколад",
   "десерт",
 ]);
+const BASKET_HARD_REJECT_HINTS = new Set([
+  "корм",
+  "семен",
+  "сюрприз",
+  "игрушк",
+  "пюре",
+  "детск",
+  "десерт",
+  "морожен",
+  "приправа",
+  "чипсы",
+  "борщ",
+  "суп ",
+  "салат",
+  "солен",
+  "марин",
+  "квашен",
+  "соус",
+]);
 const DIAGNOSIS_RULES = [
   {
     key: "diabetes",
@@ -2630,20 +2649,20 @@ function mergeProfilePatch(
 
 function buildFallbackBasketQueries(intent: SearchIntent): string[] {
   const base = intent.wantsHealthy || intent.wantsDiagnosisAdvice
-    ? ["гречка", "овсянка", "курица", "яйцо", "огурец", "помидор"]
-    : ["гречка", "макароны", "курица", "сыр", "огурец", "хлеб"];
+    ? ["крупа гречневая", "хлопья овсяные", "фарш куриный", "капуста белокочанная", "огурец гладкий", "банан"]
+    : ["крупа гречневая", "макароны", "фарш куриный", "капуста белокочанная", "огурец гладкий", "хлебцы"];
 
   const withDietBias = [...base];
   if (intent.diagnosisContext.keys.includes("diabetes")) {
-    return ["гречка", "овсянка", "яйцо", "курица", "огурец", "помидор"];
+    return ["крупа гречневая", "хлопья овсяные", "фарш куриный", "капуста белокочанная", "огурец гладкий", "банан"];
   }
 
   if (intent.diagnosisContext.keys.includes("lactose_intolerance")) {
-    return ["гречка", "курица", "яйцо", "огурец", "рис", "яблоко"];
+    return ["крупа гречневая", "рис", "фарш куриный", "капуста белокочанная", "огурец гладкий", "яблоко"];
   }
 
   if (intent.diagnosisContext.keys.includes("gastritis")) {
-    return ["овсянка", "рис", "гречка", "курица", "банан", "яйцо"];
+    return ["хлопья овсяные", "рис", "крупа гречневая", "фарш куриный", "банан", "капуста белокочанная"];
   }
 
   return withDietBias;
@@ -3160,6 +3179,10 @@ function scoreBasketCandidate(row: AssistantProductRow, intent: SearchIntent): n
 
 function shouldRejectBasketCandidate(row: AssistantProductRow, intent: SearchIntent): boolean {
   const haystack = normalizeQuery(`${row.title} ${row.compositionText ?? ""}`);
+  if ([...BASKET_HARD_REJECT_HINTS].some((hint) => haystack.includes(hint))) {
+    return true;
+  }
+
   const hasLowSignalHint = [...LOW_SIGNAL_BASKET_HINTS].some((hint) => haystack.includes(hint));
   const isPreparedFood = tokenizeWords(row.title).some((token) => PREPARED_FOOD_HINTS.has(token));
 
@@ -3221,7 +3244,7 @@ function inferProductFamily(title: string): string {
   const families: Array<[string, string[]]> = [
     ["grain", ["греч", "рис", "овся", "каша", "макарон", "круп", "хлоп"]],
     ["dairy", ["молок", "сыр", "йогурт", "кефир", "творог"]],
-    ["protein", ["кур", "индей", "говяд", "рыб", "яйц", "филе"]],
+    ["protein", ["кур", "индей", "говяд", "рыб", "яйц", "филе", "фарш"]],
     ["vegetable", ["овощ", "огур", "томат", "помид", "капуст", "морков"]],
     ["fruit", ["яблок", "банан", "груш", "ягод", "апельсин"]],
     ["drink", ["вода", "чай", "сок", "напит"]],
