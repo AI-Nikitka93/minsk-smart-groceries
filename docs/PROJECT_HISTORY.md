@@ -209,3 +209,10 @@
 Изменены файлы: docs/RESEARCH_LOG.md, docs/PROJECT_HISTORY.md
 Результат/доказательство: `docs/RESEARCH_LOG.md` + источники по `InfoPrice`, Telegram channels, Bot API, Groq Structured Outputs/Tool Use, Cloudflare Workers limits/pricing
 Следующий шаг: Перевести бот от эвристик к полноценному `LLM planner + tools + persistent user profile` и проверить UX на живых пользовательских диалогах.
+
+Дата и время: 2026-03-30 02:25
+Роль: P-QA Quality Assurance Gate
+Сделано: Выполнен первый remediation-checkpoint Stabilization Sprint: профильные сообщения теперь жёстче short-circuit'ятся в подтверждение профиля, `find_cheapest` отдаёт только строгие совпадения, Telegram `sendMessage` ретраится без parse mode после ошибки форматирования, а корзина теперь отказывается от слабых/случайных наборов и просит уточнение вместо мусорного ответа.
+Изменены файлы: AGENTS.md, src/apps/bot-worker/index.ts, docs/STATE.md, docs/state.json, docs/EXEC_PLAN.md, docs/DECISIONS.md, docs/PROJECT_HISTORY.md
+Результат/доказательство: `npm run typecheck` -> success; `rg -n "TODO|placeholder|insert code" "src/apps/bot-worker/index.ts"` -> only real Telegram `input_field_placeholder` matches; `npx wrangler deploy --config "wrangler.toml"` -> version `78bed658-a40d-4214-88f2-3278cb647831`; `GET /health` -> `ok: true`; synthetic webhook smoke-tests (`у меня диабет и бюджет 30 рублей`, `где дешевле купить масло`, `собери корзину на 3 дня`) -> `hookStatus 200`, `delta=2`
+Следующий шаг: Получить новый живой ретест в Telegram на `у меня диабет и бюджет 30 рублей`, `где дешевле купить масло`, `собери корзину на 3 дня`, затем решать step 14 с tool-contract layer.

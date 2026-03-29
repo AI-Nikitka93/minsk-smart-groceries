@@ -4,7 +4,7 @@
 Design and implement a 24/7 Telegram grocery assistant and promo channel for Minsk with zero monthly infrastructure budget.
 
 ## Current Stage
-Infrastructure scaffold for deploying `bot-worker` on Cloudflare Workers and running `parser-worker` from GitHub Actions.
+Stabilization Sprint for `bot-worker`: exact product matching, profile persistence confirmation, safer basket assembly, and remediation checkpoints after live-user audit.
 
 ## Expected Stack
 - Runtime: TypeScript on Cloudflare Workers

@@ -112,6 +112,7 @@ const STOP_WORDS = new Set([
   "рублей",
   "р",
   "byn",
+  "бюджет",
   "вкусный",
   "вкусная",
   "вкусное",
@@ -154,6 +155,21 @@ const STOP_WORDS = new Set([
   "недели",
   "месяц",
   "месяца",
+]);
+const LOW_SIGNAL_BASKET_HINTS = new Set([
+  "соус",
+  "сладость",
+  "слойка",
+  "круассан",
+  "язычки",
+  "язычк",
+  "трубочки",
+  "роллини",
+  "печенье",
+  "конфеты",
+  "батончик",
+  "шоколад",
+  "десерт",
 ]);
 const DIAGNOSIS_RULES = [
   {
@@ -511,17 +527,29 @@ async function handleMessage(message: TelegramMessage, env: BotWorkerEnv): Promi
     }
   }
 
-  const basketProducts = plan.wantsBasket
-    ? assembleBudgetBasket(products, plan.budgetMinor, intent)
-    : [];
+  if (plan.wantsBasket) {
+    const basketResult = assembleBudgetBasket(products, plan.budgetMinor, intent);
+    if (!basketResult.reliable) {
+      await sendTelegramText(env, message.chat.id, buildBasketFollowUpMessage(text, basketResult.reason));
+      return;
+    }
 
-  if (plan.wantsBasket && basketProducts.length > 0) {
-    products = basketProducts;
+    products = basketResult.items;
   }
 
   if (products.length === 0) {
     if (message.from && hasProfilePatch(plan.profilePatch) && intent.searchTerms.length === 0) {
       await sendTelegramText(env, message.chat.id, buildProfileSavedMessage(effectiveProfile));
+      return;
+    }
+
+    if (plan.compareCheapest && intent.searchTerms.length > 0) {
+      await sendTelegramText(
+        env,
+        message.chat.id,
+        buildCheapestMissMessage(text, intent.searchTerms),
+        buildCheapestMissKeyboard(intent.searchTerms),
+      );
       return;
     }
 
@@ -722,6 +750,26 @@ async function searchProductsForPlan(
   const deduped = dedupeOffers(combined);
   const ranked = rankOffers(deduped, intent);
 
+  if (plan.compareCheapest) {
+    const strictMatches = filterStrictCheapestMatches(ranked, intent);
+    if (strictMatches.length === 0) {
+      return [];
+    }
+
+    return strictMatches
+      .slice()
+      .sort((left, right) => {
+        const leftPrice = left.priceMinor ?? Number.MAX_SAFE_INTEGER;
+        const rightPrice = right.priceMinor ?? Number.MAX_SAFE_INTEGER;
+        if (leftPrice !== rightPrice) {
+          return leftPrice - rightPrice;
+        }
+
+        return (right.discountPercent ?? 0) - (left.discountPercent ?? 0);
+      })
+      .slice(0, limit);
+  }
+
   if (ranked.length === 0 && intent.searchTerms.length > 0) {
     const approximateRows = await selectRelaxedOffers(db, intent, limit);
     if (approximateRows.length > 0) {
@@ -740,21 +788,6 @@ async function searchProductsForPlan(
     if (plan.wantsBasket || plan.compareCheapest || plan.needsDiagnosisAdvice || intent.wantsHealthy) {
       return fallbackRanked.slice(0, limit);
     }
-  }
-
-  if (plan.compareCheapest) {
-    return ranked
-      .slice()
-      .sort((left, right) => {
-        const leftPrice = left.priceMinor ?? Number.MAX_SAFE_INTEGER;
-        const rightPrice = right.priceMinor ?? Number.MAX_SAFE_INTEGER;
-        if (leftPrice !== rightPrice) {
-          return leftPrice - rightPrice;
-        }
-
-        return (right.discountPercent ?? 0) - (left.discountPercent ?? 0);
-      })
-      .slice(0, limit);
   }
 
   return ranked.slice(0, limit);
@@ -1164,6 +1197,36 @@ function filterConfidentMatches(
   return filtered.length > 0 ? filtered : [];
 }
 
+function filterStrictCheapestMatches(
+  rows: AssistantProductRow[],
+  intent: SearchIntent,
+): AssistantProductRow[] {
+  if (intent.searchTerms.length === 0) {
+    return [];
+  }
+
+  const primaryTerm = intent.searchTerms[0];
+  const exactForms = getAcceptableExactForms(primaryTerm);
+
+  return rows.filter((row) => {
+    const titleTokens = tokenizeWords(row.title);
+    const headTokens = titleTokens.slice(0, 3);
+    const prepared = titleTokens.some((token) => PREPARED_FOOD_HINTS.has(token));
+    const hasHeadExact = headTokens.some((token) => exactForms.has(token));
+    const hasHeadPrefix = headTokens.some((token) => token.startsWith(primaryTerm));
+
+    if (hasHeadExact || hasHeadPrefix) {
+      return true;
+    }
+
+    if (!prepared && row.matchKind === "exact" && (row.matchScore ?? 0) >= 120) {
+      return true;
+    }
+
+    return false;
+  });
+}
+
 function buildSearchIntent(query: string, profile?: PersistedUserProfile | null): SearchIntent {
   const normalizedQuery = normalizeQuery(query);
   const rawTerms = normalizedQuery
@@ -1408,6 +1471,29 @@ function buildNoResultsMessage(userQuery: string): string {
   ].join("\n");
 }
 
+function buildCheapestMissMessage(userQuery: string, searchTerms: string[]): string {
+  const productHint = searchTerms.join(" ").trim() || userQuery;
+  return [
+    `Я не нашёл точного товара для запроса: ${userQuery}`,
+    "",
+    `Пока в базе нет уверенного точного совпадения для "${productHint}".`,
+    "Попробуйте уточнить товар, например: масло сливочное, масло оливковое, молоко 2.5%, сыр гауда.",
+  ].join("\n");
+}
+
+function buildCheapestMissKeyboard(searchTerms: string[]): Record<string, unknown> {
+  const base = searchTerms[0] ?? "масло";
+  return {
+    keyboard: [
+      [{ text: `${base} сливочное` }, { text: `${base} оливковое` }],
+      [{ text: "молоко 2.5%" }, { text: "сыр гауда" }],
+    ],
+    resize_keyboard: true,
+    one_time_keyboard: true,
+    input_field_placeholder: "Уточните точный продукт для сравнения цен...",
+  };
+}
+
 function buildNoResultsKeyboard(): Record<string, unknown> {
   return {
     keyboard: [
@@ -1469,6 +1555,18 @@ function buildBasketReply(
   ].filter((value): value is string => Boolean(value));
 
   return lines.join("\n");
+}
+
+function buildBasketFollowUpMessage(userQuery: string, reason: string): string {
+  return [
+    `Пока не хочу собирать плохую корзину по запросу: ${userQuery}`,
+    "",
+    reason,
+    "Уточните, пожалуйста, основу корзины. Например:",
+    "• корзина на 3 дня из круп, курицы и овощей",
+    "• бюджетная корзина без лактозы",
+    "• корзина на неделю при диабете",
+  ].join("\n");
 }
 
 function buildCheapestReply(
@@ -1564,13 +1662,27 @@ async function sendTelegramText(
   replyMarkup?: Record<string, unknown>,
   parseMode?: string,
 ): Promise<void> {
-  await callTelegramApi(env, "sendMessage", {
-    chat_id: chatId,
-    text,
-    disable_web_page_preview: false,
-    reply_markup: replyMarkup,
-    parse_mode: parseMode,
-  });
+  try {
+    await callTelegramApi(env, "sendMessage", {
+      chat_id: chatId,
+      text,
+      disable_web_page_preview: false,
+      reply_markup: replyMarkup,
+      parse_mode: parseMode,
+    });
+  } catch (error) {
+    if (!parseMode || !isTelegramParseModeError(error)) {
+      throw error;
+    }
+
+    console.warn("Retrying Telegram sendMessage without parse mode after formatting error", error);
+    await callTelegramApi(env, "sendMessage", {
+      chat_id: chatId,
+      text,
+      disable_web_page_preview: false,
+      reply_markup: replyMarkup,
+    });
+  }
 }
 
 async function answerInlineQuery(
@@ -1954,12 +2066,26 @@ function isProfileUpdateOnlyQuery(
   intent: SearchIntent,
 ): boolean {
   return (
-    plan.profileOnly &&
     hasProfilePatch(plan.profilePatch) &&
-    intent.searchTerms.length === 0 &&
     !plan.wantsBasket &&
     !plan.compareCheapest &&
-    !/(найд|покаж|где|дешев|корзин|купит|ссылк)/iu.test(text)
+    (plan.profileOnly || looksLikeStandaloneProfileUpdate(text)) &&
+    !/(найд|покаж|где|дешев|корзин|купит|ссылк|подбер|собер|что\s+можно|можно\s+ли)/iu.test(text)
+  );
+}
+
+function looksLikeStandaloneProfileUpdate(text: string): boolean {
+  const normalized = normalizeQuery(text);
+  return (
+    /\bу меня\b/u.test(normalized) ||
+    /\bмой бюджет\b/u.test(normalized) ||
+    /\bмне нельзя\b/u.test(normalized) ||
+    /\bаллерг/u.test(normalized) ||
+    /\bбез лактоз/u.test(normalized) ||
+    /\bбез глютен/u.test(normalized) ||
+    /\bне переношу\b/u.test(normalized) ||
+    /\bисключи\b/u.test(normalized) ||
+    /\bучти\b/u.test(normalized)
   );
 }
 
@@ -2058,6 +2184,14 @@ function buildProfileSavedMessage(profile: PersistedUserProfile | null): string 
   ].filter((value): value is string => Boolean(value));
 
   return parts.join("\n");
+}
+
+function isTelegramParseModeError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return /parse entities|can't parse entities|parse mode/i.test(error.message);
 }
 
 function matchesAnyTerm(haystack: string, terms: readonly string[]): boolean {
@@ -2186,7 +2320,7 @@ async function planUserRequestWithGroq(
       };
     }>(content);
 
-    if (!parsed?.action) {
+    if (!parsed?.action || !isPlannedAction(parsed.action)) {
       return null;
     }
 
@@ -2322,13 +2456,18 @@ function asPlainObject(value: unknown): Record<string, unknown> {
   return {};
 }
 
+function isPlannedAction(value: unknown): value is PlannedAction {
+  return value === "search" || value === "find_cheapest" || value === "build_basket" || value === "diagnosis_safe";
+}
+
 function assembleBudgetBasket(
   products: AssistantProductRow[],
   budgetMinor: number | null,
   intent: SearchIntent,
-): AssistantProductRow[] {
+): { items: AssistantProductRow[]; reliable: boolean; reason: string } {
   const sorted = products
     .slice()
+    .filter((product) => !shouldRejectBasketCandidate(product, intent))
     .sort((left, right) => scoreBasketCandidate(right, intent) - scoreBasketCandidate(left, intent));
   const picked: AssistantProductRow[] = [];
   const usedFamilies = new Set<string>();
@@ -2363,10 +2502,27 @@ function assembleBudgetBasket(
   }
 
   if (picked.length === 0) {
-    return sorted.slice(0, Math.min(3, sorted.length));
+    return {
+      items: [],
+      reliable: false,
+      reason: "В базе мало подходящих базовых продуктов для уверенной корзины. Лучше уточнить основу рациона или тип корзины.",
+    };
   }
 
-  return picked;
+  const quality = assessBasketQuality(picked, budgetMinor, intent);
+  if (!quality.reliable) {
+    return {
+      items: [],
+      reliable: false,
+      reason: quality.reason,
+    };
+  }
+
+  return {
+    items: picked,
+    reliable: true,
+    reason: "",
+  };
 }
 
 function scoreBasketCandidate(row: AssistantProductRow, intent: SearchIntent): number {
@@ -2375,6 +2531,64 @@ function scoreBasketCandidate(row: AssistantProductRow, intent: SearchIntent): n
   const discountScore = row.discountPercent ?? 0;
   const medicalScore = scoreMedicalSuitability(row, intent);
   return base + priceScore + discountScore + medicalScore;
+}
+
+function shouldRejectBasketCandidate(row: AssistantProductRow, intent: SearchIntent): boolean {
+  const haystack = normalizeQuery(`${row.title} ${row.compositionText ?? ""}`);
+  const hasLowSignalHint = [...LOW_SIGNAL_BASKET_HINTS].some((hint) => haystack.includes(hint));
+  const isPreparedFood = tokenizeWords(row.title).some((token) => PREPARED_FOOD_HINTS.has(token));
+
+  if (!hasLowSignalHint && !isPreparedFood) {
+    return false;
+  }
+
+  if (intent.wantsHealthy || intent.wantsDiagnosisAdvice || intent.diagnosisContext.keys.length > 0) {
+    return true;
+  }
+
+  return hasLowSignalHint;
+}
+
+function assessBasketQuality(
+  items: AssistantProductRow[],
+  budgetMinor: number | null,
+  intent: SearchIntent,
+): { reliable: boolean; reason: string } {
+  const families = new Set(items.map((item) => inferProductFamily(item.title)).filter((family) => family !== "other"));
+  const totalMinor = items.reduce((sum, item) => sum + (item.priceMinor ?? 0), 0);
+
+  if (items.length < 3) {
+    return {
+      reliable: false,
+      reason: "Сейчас нашлось слишком мало внятных позиций для полноценной корзины.",
+    };
+  }
+
+  if (families.size < 2) {
+    return {
+      reliable: false,
+      reason: "Подборка получилась слишком однотипной. Нужны хотя бы 2-3 базовые категории продуктов.",
+    };
+  }
+
+  if (budgetMinor !== null && totalMinor < Math.floor(budgetMinor * 0.35)) {
+    return {
+      reliable: false,
+      reason: "Подборка заняла слишком маленькую долю бюджета и выглядит как неполная корзина, а не реальный набор продуктов.",
+    };
+  }
+
+  if ((intent.wantsHealthy || intent.wantsDiagnosisAdvice) && items.some((item) => shouldRejectBasketCandidate(item, intent))) {
+    return {
+      reliable: false,
+      reason: "Среди найденных позиций слишком много спорных или случайных товаров для полезной корзины.",
+    };
+  }
+
+  return {
+    reliable: true,
+    reason: "",
+  };
 }
 
 function inferProductFamily(title: string): string {

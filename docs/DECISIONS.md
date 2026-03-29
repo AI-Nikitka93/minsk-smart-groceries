@@ -79,3 +79,8 @@
 - Decision: Introduce a first persistent profile layer inside `user_profile`, so the bot can remember budget, diagnoses, allergies, excluded ingredients, and preferred stores between messages.
 - Why: Without memory, the bot remains a clever one-shot search interface rather than a personal grocery assistant.
 - Impact: Planner output can now update user context directly from natural language, and future basket/comparison flows can rely on stored profile data instead of re-asking everything each session.
+
+## 2026-03-30 - Prefer explicit refusal over fake-smart shopping answers
+- Decision: During Stabilization Sprint, `find_cheapest` must return only strict product matches, profile-only messages must short-circuit into confirmation, basket assembly must refuse low-quality selections, and Telegram Markdown errors must retry as plain text.
+- Why: Live user logs showed that loose matches and silent formatting failures were more damaging than a narrower but honest answer.
+- Impact: The bot may ask for уточнение more often, but it will stop presenting croissants as butter, stop swallowing profile updates, and stop shipping nonsense baskets as if they were valid shopping help.
