@@ -16,7 +16,11 @@ Telegram bot webhook worker implementation on top of live-validated parsers, Tur
 - Deployment: zero-cost serverless cloud services
 
 ## Main Artifacts
+- Public repository: `https://github.com/AI-Nikitka93/minsk-smart-groceries`
 - Architecture document: `ARCHITECTURE.md`
+- Russian README: `README.md`
+- English README: `README.en.md`
+- License: `LICENSE`
 - Parser adapters: `src/parsers/`
 - Database schema: `src/db/schema.ts`
 - Database repositories: `src/db/repositories.ts`

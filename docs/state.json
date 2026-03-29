@@ -1,6 +1,6 @@
 {
   "current_goal": "Move from approved architecture to deployable parser and Telegram bot workers for Smart Grocery Assistant.",
-  "current_task": "Parser ingestion, Turso schema, repository layer, and the first Telegram webhook worker are implemented on Cloudflare Workers.",
+  "current_task": "Parser ingestion, Turso schema, repository layer, first Telegram webhook worker, and the public GitHub repository are in place.",
   "status": "IN_PROGRESS",
   "active_step": "docs/EXEC_PLAN.md step 10",
   "next_step": "Add Wrangler bindings/config, then run local smoke tests for scheduled parser execution and Telegram webhook flows.",
@@ -20,5 +20,5 @@
     "docs/api_map.md",
     "docs/RESEARCH_LOG.md"
   ],
-  "updated_at": "2026-03-29 15:49"
+  "updated_at": "2026-03-29 19:59"
 }

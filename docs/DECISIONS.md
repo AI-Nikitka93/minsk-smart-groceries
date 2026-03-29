@@ -54,3 +54,8 @@
 - Decision: Use Groq Chat Completions as the first conversational LLM path in the Telegram bot worker, with the model configurable and `llama-3.3-70b-versatile` as the default.
 - Why: Current product constraints favor a cardless, edge-friendly HTTPS API that can be called directly from Cloudflare Workers without adding SDK-heavy runtime coupling.
 - Impact: Bot replies are built from Turso search results plus a Groq system prompt, and the worker must degrade gracefully to a deterministic text summary if Groq fails.
+
+## 2026-03-29 - Publish the repository under Apache-2.0 with bilingual documentation
+- Decision: Publish the project as a public GitHub repository with Apache License 2.0, plus Russian and English README files that name the author as `AI_Nikitka93`.
+- Why: The project now needs a public collaboration surface while keeping explicit legal terms, copyright notice, and clear entry documentation for both Russian- and English-speaking readers.
+- Impact: Public metadata, licensing, and future contributor-facing documentation must stay synchronized with runtime architecture and deployment status.

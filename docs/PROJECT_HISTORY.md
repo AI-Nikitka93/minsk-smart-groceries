@@ -48,3 +48,10 @@
 Изменены файлы: AGENTS.md, docs/EXEC_PLAN.md, EXECUTION_PLAN.md, docs/STATE.md, docs/state.json, docs/PROJECT_MAP.md, docs/DECISIONS.md, docs/RESEARCH_LOG.md, docs/PROJECT_HISTORY.md, src/apps/bot-worker/index.ts
 Результат/доказательство: `npx tsc --pretty false --noEmit --skipLibCheck --types node --target es2022 --module esnext --moduleResolution bundler --lib es2022,dom "m:\\Projects\\Bot\\minsk-smart-groceries\\drizzle.config.ts" "m:\\Projects\\Bot\\minsk-smart-groceries\\src\\db\\schema.ts" "m:\\Projects\\Bot\\minsk-smart-groceries\\src\\db\\repositories.ts" "m:\\Projects\\Bot\\minsk-smart-groceries\\src\\parsers\\types.ts" "m:\\Projects\\Bot\\minsk-smart-groceries\\src\\apps\\bot-worker\\index.ts"` -> exit code 0; `rg -n "TODO|placeholder|insert code" "m:\\Projects\\Bot\\minsk-smart-groceries\\src\\apps\\bot-worker\\index.ts"` -> no matches
 Следующий шаг: Добавить Wrangler bindings и локальный smoke test для webhook path `/webhook`, затем привязать deploy/manual `setWebhook` flow.
+
+Дата и время: 2026-03-29 19:59
+Роль: P-BOT Universal Bot Architect
+Сделано: Инициализирован git-репозиторий, добавлены Apache-2.0 лицензия и README на русском/английском, после чего проект опубликован как public GitHub repository.
+Изменены файлы: AGENTS.md, docs/EXEC_PLAN.md, docs/STATE.md, docs/state.json, docs/DECISIONS.md, docs/PROJECT_HISTORY.md, .gitignore, README.md, README.en.md, LICENSE
+Результат/доказательство: `git commit -m "chore(repo): publish project skeleton and legal metadata — prepare public GitHub repository" ...` -> commit `16ad33e`; `gh repo create "AI-Nikitka93/minsk-smart-groceries" --public --source "." --remote "origin" --push --description "Telegram grocery assistant and promo backend for Minsk on Cloudflare Workers, Turso, and Drizzle ORM"` -> `https://github.com/AI-Nikitka93/minsk-smart-groceries`; `gh repo view "AI-Nikitka93/minsk-smart-groceries" --json nameWithOwner,url,visibility,isPrivate,licenseInfo,defaultBranchRef` -> visibility `PUBLIC`, license `apache-2.0`, branch `main`
+Следующий шаг: Добавить Wrangler bindings/config и smoke tests, затем продолжить deploy path для parser-worker и bot-worker.
