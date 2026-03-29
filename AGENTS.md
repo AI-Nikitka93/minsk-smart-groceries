@@ -21,6 +21,7 @@ Infrastructure scaffold for deploying `bot-worker` on Cloudflare Workers and run
 - Russian README: `README.md`
 - English README: `README.en.md`
 - License: `LICENSE`
+- Bot identity pack: `docs/BOT_IDENTITY.md`
 - Cloudflare config: `wrangler.toml`
 - Node bootstrap: `package.json`, `tsconfig.json`
 - GitHub Actions workflow: `.github/workflows/parser.yml`

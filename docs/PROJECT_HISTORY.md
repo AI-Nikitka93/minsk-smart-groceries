@@ -69,3 +69,143 @@
 Изменены файлы: docs/STATE.md, docs/state.json, docs/PROJECT_HISTORY.md
 Результат/доказательство: локальные `.env*` и `.dev.vars*` не найдены; `gh secret list -R "AI-Nikitka93/minsk-smart-groceries" --json name,updatedAt` -> `[]`; `npx wrangler whoami --json` -> authenticated; `npx wrangler secret list --config "wrangler.toml"` -> `Worker "minsk-smart-groceries-bot" not found`
 Следующий шаг: Добавить GitHub secrets `TURSO_URL` и `TURSO_AUTH_TOKEN`, затем выполнить первый `wrangler deploy` и после него задать Worker secrets.
+
+Дата и время: 2026-03-29 20:39
+Роль: P-DEPLOY Autonomous Server & Hosting Manager
+Сделано: Выполнен первый реальный deploy `minsk-smart-groceries-bot`, infra-изменения запушены в GitHub, затем повторно проверены Cloudflare/GitHub secrets и наличие workflow.
+Изменены файлы: docs/STATE.md, docs/state.json, docs/PROJECT_HISTORY.md
+Результат/доказательство: `npx wrangler deploy --config "wrangler.toml"` -> `https://minsk-smart-groceries-bot.aiartnikitka93.workers.dev`; `git push` -> commit `d59810e`; `npx wrangler secret list --config "wrangler.toml"` -> `[]`; `gh secret list -R "AI-Nikitka93/minsk-smart-groceries" --json name,updatedAt` -> `[]`; `gh workflow list -R "AI-Nikitka93/minsk-smart-groceries"` -> `parser-worker active`
+Следующий шаг: Получить реальные значения `BOT_TOKEN`, `WEBHOOK_SECRET`, `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `GROQ_API_KEY`, затем занести их в Cloudflare/GitHub и поставить Telegram webhook.
+
+Дата и время: 2026-03-29 20:44
+Роль: P-BOT Universal Bot Architect
+Сделано: Подготовлен branding pack для Telegram-бота и канала: русское имя, описания, username-кандидаты, channel identity и тексты для BotFather.
+Изменены файлы: AGENTS.md, docs/BOT_IDENTITY.md, docs/PROJECT_HISTORY.md
+Результат/доказательство: `docs/BOT_IDENTITY.md`
+Следующий шаг: Проверить свободен ли `@groshik_minsk_bot` и `@groshik_minsk`, затем перенести подтверждённый bot username в `wrangler.toml`.
+
+Дата и время: 2026-03-29 20:56
+Роль: P-BOT Universal Bot Architect
+Сделано: Уточнён branding pack под более понятное и нейтральное позиционирование без названий конкретных магазинов; выбран основной бренд `Выгодная корзина Минск` и зафиксирован канонический файл хранения identity-данных.
+Изменены файлы: docs/BOT_IDENTITY.md, docs/DECISIONS.md, docs/STATE.md, docs/state.json, docs/PROJECT_HISTORY.md
+Результат/доказательство: `docs/BOT_IDENTITY.md`
+Следующий шаг: Проверить свободны ли `@korzina_minsk_bot` и `@korzina_minsk`, затем перенести подтверждённый bot username в `wrangler.toml`.
+
+Дата и время: 2026-03-29 21:00
+Роль: P-DEPLOY Autonomous Server & Hosting Manager
+Сделано: Создан локальный ignored-файл для централизованного ввода секретов оператором, чтобы потом разнести значения по Cloudflare Worker secrets и GitHub Actions secrets без ручной путаницы.
+Изменены файлы: .env.operator.local, docs/STATE.md, docs/state.json, docs/PROJECT_HISTORY.md
+Результат/доказательство: `.env.operator.local`
+Следующий шаг: Дождаться заполнения `.env.operator.local`, затем автоматически занести значения в Cloudflare и GitHub и поставить Telegram webhook.
+
+Дата и время: 2026-03-29 21:06
+Роль: P-DEPLOY Autonomous Server & Hosting Manager
+Сделано: Значения из `.env.operator.local` разнесены по Cloudflare Worker secrets и GitHub Actions secrets, отсутствующий `WEBHOOK_SECRET` безопасно сгенерирован локально, `BOT_USERNAME` синхронизирован в `wrangler.toml`, бот повторно задеплоен, Telegram webhook установлен.
+Изменены файлы: wrangler.toml, docs/STATE.md, docs/state.json, docs/PROJECT_HISTORY.md
+Результат/доказательство: `npx wrangler secret list --config "wrangler.toml"` -> `BOT_TOKEN`, `GROQ_API_KEY`, `TURSO_AUTH_TOKEN`, `TURSO_DATABASE_URL`, `WEBHOOK_SECRET`; `gh secret list -R "AI-Nikitka93/minsk-smart-groceries" --json name,updatedAt` -> `TURSO_URL`, `TURSO_AUTH_TOKEN`; `Invoke-RestMethod https://api.telegram.org/bot***/getWebhookInfo` -> webhook URL `https://minsk-smart-groceries-bot.aiartnikitka93.workers.dev/webhook`, pending `0`, last error `null`; `npx wrangler deploy --config "wrangler.toml"` -> version `f41feffd-a907-4021-954b-24655d82e049`
+Следующий шаг: Прогнать живой smoke test сообщения боту, inline-запроса и ручной запуск parser workflow.
+
+Дата и время: 2026-03-29 21:17
+Роль: P-BOT Universal Bot Architect
+Сделано: Выполнен живой smoke test Telegram bot transport и message flow: подтверждена идентичность бота через `getMe`, health endpoint worker, прямая отправка сообщений в приватный чат владельца и успешная обработка синтетического `/start` через live webhook. Дополнительно выявлено, что inline mode пока выключен в BotFather.
+Изменены файлы: docs/STATE.md, docs/state.json, docs/PROJECT_HISTORY.md
+Результат/доказательство: `getMe` -> username `korzina_minsk_bot`, display name `Выгодная корзина Минск`, `supports_inline_queries: false`; `GET /health` -> `ok: true`, `missingBindings: []`; direct `sendMessage` -> `message_id: 5`; live POST to `/webhook` with valid secret -> `200 ok`; next direct `sendMessage` -> `message_id: 7`, что подтверждает промежуточную отправку приветствия worker-ом после `/start`
+Следующий шаг: Включить inline mode через BotFather (`/setinline`), затем прогнать реальный inline query smoke test и один ручной запуск parser workflow.
+
+Дата и время: 2026-03-29 21:21
+Роль: P-DEPLOY Autonomous Server & Hosting Manager
+Сделано: Установлен недостающий пакет `dotenv`, схема Turso применена через `drizzle-kit push --force`, после чего ручной запуск GitHub Actions workflow `parser-worker` успешно завершился.
+Изменены файлы: package.json, docs/STATE.md, docs/state.json, docs/PROJECT_HISTORY.md
+Результат/доказательство: `npm install` -> added `dotenv`; `npx drizzle-kit push --config "drizzle.config.ts" --force` -> `[✓] Changes applied`; `gh workflow run "parser.yml" -R "AI-Nikitka93/minsk-smart-groceries"` -> run `23715847497`; `gh run watch 23715847497 -R "AI-Nikitka93/minsk-smart-groceries" --exit-status` -> success
+Следующий шаг: Включить inline mode через BotFather и прогнать реальный inline query smoke test.
+
+Дата и время: 2026-03-29 22:02
+Роль: P-BOT Universal Bot Architect
+Сделано: Получено подтверждение от пользователя об успешном включении inline mode через BotFather и повторно подтверждено через Telegram `getMe`, что `supports_inline_queries` теперь равно `true`.
+Изменены файлы: docs/STATE.md, docs/state.json, docs/PROJECT_HISTORY.md
+Результат/доказательство: `getMe` -> `supports_inline_queries: true` для `@korzina_minsk_bot`
+Следующий шаг: Отправить один реальный inline query из Telegram и подтвердить end-to-end выдачу результатов в чате.
+
+Дата и время: 2026-03-29 22:12
+Роль: P-BOT Universal Bot Architect
+Сделано: Изменена логика `bot-worker`, чтобы для продуктовых запросов бот в первую очередь отдавал детерминированный список товаров с ценой, магазином и прямой ссылкой на карточку, а не только свободный AI-ответ; обновлён `/start` под продуктовый сценарий.
+Изменены файлы: src/apps/bot-worker/index.ts, docs/STATE.md, docs/state.json, docs/PROJECT_HISTORY.md
+Результат/доказательство: `npm run typecheck` -> success; `npx wrangler deploy --config "wrangler.toml"` -> version `8b7b9ad3-f1df-4594-bb57-092d30223490`; live webhook `/start` smoke test -> `200 ok`; direct `sendMessage` ids `19 -> 21`, что подтверждает промежуточную отправку обновлённого стартового сообщения worker-ом
+Следующий шаг: Прогнать один реальный inline query из Telegram и затем донастроить ranking, чтобы по запросу вроде `сыр` выше поднимались именно прямые карточки сыра, а не косвенно совпавшие позиции.
+
+Дата и время: 2026-03-29 22:16
+Роль: P-BOT Universal Bot Architect
+Сделано: Ужесточён ranking продуктового поиска: для запросов с явным названием продукта бот больше не подмешивает общие fallback-товары, а ищет строгие или мягкие совпадения только по самим терминам запроса; в stop-words добавлены типичные оценочные прилагательные вроде `вкусный`.
+Изменены файлы: src/apps/bot-worker/index.ts, docs/STATE.md, docs/state.json, docs/PROJECT_HISTORY.md
+Результат/доказательство: `npm run typecheck` -> success; `npx wrangler deploy --config "wrangler.toml"` -> version `227c84cc-53f1-4125-b836-88fc314f3448`
+Следующий шаг: Повторить запрос `сыр вкусный` и один inline query в Telegram, чтобы подтвердить улучшение выдачи на живых данных.
+
+Дата и время: 2026-03-29 22:24
+Роль: P-QA Quality Assurance Gate
+Сделано: Выполнена pre-release полировка `bot-worker`: улучшен Groq system prompt под роль дружелюбного нутрициолога-шоппера, добавлен красивый no-results сценарий с reply-keyboard подсказками, усилен фильтр слабых продуктовых совпадений для single-term запросов и улучшено форматирование inline-карточек.
+Изменены файлы: src/apps/bot-worker/index.ts, docs/STATE.md, docs/state.json, docs/PROJECT_HISTORY.md
+Результат/доказательство: `npm run typecheck` -> success; `npx wrangler deploy --config "wrangler.toml"` -> version `771a1c55-ed76-4ca7-82c9-9de7d28f3fd6`
+Следующий шаг: Повторить реальные запросы `масло`, `торт` и один inline query в Telegram, чтобы подтвердить поведение после QA-полировки на живом пользователе.
+
+Дата и время: 2026-03-29 22:49
+Роль: P-QA Quality Assurance Gate
+Сделано: Добавлена обработка естественных фраз: расширен список бытовых stop-words (`приготовить`, `ужин`, `обед` и т.п.), а SQL-поиск для product terms теперь ищет не только точную форму, но и term variants через `LIKE` + stem-like варианты.
+Изменены файлы: src/apps/bot-worker/index.ts, docs/STATE.md, docs/state.json, docs/PROJECT_HISTORY.md
+Результат/доказательство: `npm run typecheck` -> success; `npx wrangler deploy --config "wrangler.toml"` -> version `af00e5fe-50a8-4a97-a961-0534ae306ea5`
+Следующий шаг: Повторить реальные запросы `приготовит ужин с гречки`, `масло`, `торт` и один inline query в Telegram для финального QA-гейта.
+
+Дата и время: 2026-03-30 01:12
+Роль: P-BOT Universal Bot Architect
+Сделано: Усилен интеллект `bot-worker`: добавлены AI query rewrite для сложных живых фраз, режимы корзины и diagnosis-aware ranking по составу, обновлён стартовый сценарий под подбор корзины и продукты под ограничения, изменения выкатаны в production.
+Изменены файлы: src/apps/bot-worker/index.ts, docs/STATE.md, docs/state.json, docs/DECISIONS.md, docs/RESEARCH_LOG.md, docs/PROJECT_HISTORY.md
+Результат/доказательство: `npm run typecheck` -> success; `npx wrangler deploy --config "wrangler.toml"` -> version `872f4ee4-6daa-49d8-ae05-11071ebcc77f`; `GET /health` -> `ok: true`, `missingBindings: []`; synthetic webhook test `приготовить полезную корзину на 20 рублей при диабете` -> `hookStatus 200`, direct message ids `44 -> 46`, что подтверждает промежуточный ответ воркера в Telegram
+Следующий шаг: Проверить в реальном Telegram ответы на запросы про корзину, диагнозы и inline, затем решить нужен ли persistent user profile поверх уже добавленной логики.
+
+Дата и время: 2026-03-30 01:25
+Роль: P-BOT Universal Bot Architect
+Сделано: Переведён `bot-worker` на более реальный smart-flow: Groq теперь строит структурированный planner (`search`, `find_cheapest`, `build_basket`, `diagnosis_safe`), после чего бот детерминированно выполняет нужный сценарий в Turso и только потом формирует ответ.
+Изменены файлы: src/apps/bot-worker/index.ts, docs/STATE.md, docs/state.json, docs/PROJECT_HISTORY.md
+Результат/доказательство: `npm run typecheck` -> success; `npx wrangler deploy --config "wrangler.toml"` -> version `d2207188-dd63-4447-b40f-5a953b7c9518`; `GET /health` -> `ok: true`, `missingBindings: []`; synthetic webhook test `собери корзину на 20 рублей при диабете` -> `hookStatus 200`, direct message ids `47 -> 49`, что подтверждает промежуточный ответ воркера в Telegram
+Следующий шаг: Получить живые ответы в Telegram на сценарии корзины, cheapest lookup, diagnosis-safe lookup и inline query, затем решить нужен ли отдельный persistent profile/memory layer для пользователя.
+
+Дата и время: 2026-03-30 01:34
+Роль: P-BOT Universal Bot Architect
+Сделано: Исправлена регрессия planner-слоя: в product search больше не попадают служебные слова вроде `купить`, `найди`, `покажи`, `при`, а planner-поиск теперь объединяет AI `catalogQueries` с детерминированными `searchTerms` и умеет откатываться на fallback offers для basket/diagnosis/cheapest сценариев.
+Изменены файлы: src/apps/bot-worker/index.ts, docs/STATE.md, docs/state.json, docs/PROJECT_HISTORY.md
+Результат/доказательство: `npm run typecheck` -> success; `npx wrangler deploy --config "wrangler.toml"` -> version `b5f76679-0f97-4b9c-8ef3-d51d3ac623d0`; synthetic webhook tests `собери корзину на 20 рублей при диабете` and `где дешевле купить масло` -> `hookStatus 200`, direct message ids `56 -> 58` and `59 -> 61`, что подтверждает промежуточные ответы воркера в Telegram после фикса
+Следующий шаг: Получить реальные ответы бота на проблемные запросы из Telegram и оценить уже не транспорт, а качество контента и полезность подбора.
+
+Дата и время: 2026-03-30 01:40
+Роль: P-BOT Universal Bot Architect
+Сделано: Добавлен persistent user-profile layer: `bot-worker` теперь умеет читать и обновлять `user_profile`, planner может извлекать из свободного текста бюджет/диагнозы/аллергии/исключаемые ингредиенты, а ранжирование начинает учитывать сохранённые ограничения и любимые магазины.
+Изменены файлы: src/apps/bot-worker/index.ts, src/db/repositories.ts, docs/STATE.md, docs/state.json, docs/DECISIONS.md, docs/PROJECT_HISTORY.md
+Результат/доказательство: `npm run typecheck` -> success; `npx wrangler deploy --config "wrangler.toml"` -> version `0e56e775-8ebe-438c-b4d0-aad865d2e052`; synthetic webhook test `у меня диабет, без лактозы и бюджет 25 рублей` -> `hookStatus 200`; direct DB check in Turso -> `user_profile.telegram_user_id=6297262714`, `budget_minor=2500`, `excluded_ingredients=[\"лактоза\"]`, `notification_settings.profileContext.diagnoses=[\"диабет\"]`
+Следующий шаг: Получить живые ответы в Telegram на реальные сценарии корзины, cheapest lookup, diagnosis-safe lookup и inline query, затем решать второй stateful слой: session memory и follow-up уточнения.
+
+Дата и время: 2026-03-30 01:48
+Роль: P-BOT Universal Bot Architect
+Сделано: Исправлены два live-UX провала после ретеста пользователя: profile-only сообщения теперь должны подтверждаться отдельным ответом, а planner сильнее синхронизируется с детерминированным intent для basket/cheapest сценариев; добавлен дополнительный fallback на похожие товары вместо немедленного no-results.
+Изменены файлы: src/apps/bot-worker/index.ts, docs/STATE.md, docs/state.json, docs/PROJECT_HISTORY.md
+Результат/доказательство: `npm run typecheck` -> success; `npx wrangler deploy --config "wrangler.toml"` -> version `3765cc24-aea0-485e-881f-22754540acc1`
+Следующий шаг: Получить новый живой retest в Telegram на `у меня диабет и бюджет 30 рублей`, `собери корзину на 3 дня`, `где дешевле купить масло`, чтобы оценить уже пользовательский текст результата, а не только технический проход.
+
+Дата и время: 2026-03-30 01:58
+Роль: P-BOT Universal Bot Architect
+Сделано: Сдвинут ответный слой ближе к LLM-first chat flow: корзины, cheapest lookup и diagnosis/profile сценарии теперь чаще проходят через AI assistant prompt, planner научен отдавать `profileOnly`, а fallback path стал лучше сохранять профиль и синтезировать базовые basket queries даже при неидеальном planner output.
+Изменены файлы: src/apps/bot-worker/index.ts, docs/STATE.md, docs/state.json, docs/PROJECT_HISTORY.md
+Результат/доказательство: `npm run typecheck` -> success; `npx wrangler deploy --config "wrangler.toml"` -> version `57b34208-fbc3-4ea7-b0d3-2917f31586e1`
+Следующий шаг: Получить новый живой retest в Telegram и оценить именно качество пользовательских ответов по профилю, корзине и cheapest flow.
+
+Дата и время: 2026-03-30 02:09
+Роль: P-QA Quality Assurance Gate
+Сделано: Проведён полный аудит поведения `bot-worker` по живым логам пользователя, текущему коду и DB probes; сформирован явный `NO-GO` verdict, создан отдельный audit-артефакт и переведён основной план в режим Stabilization Sprint вместо дальнейших хаотичных фич-итераций.
+Изменены файлы: docs/BOT_AUDIT_2026-03-30.md, docs/EXEC_PLAN.md, docs/STATE.md, docs/state.json, docs/PROJECT_HISTORY.md
+Результат/доказательство: live user logs (`у меня диабет...` -> no-results, `масло` -> irrelevant matches, basket -> poor picks), DB count probe (`масло=1`, `молоко=0`, `торт=0`, `гречка=0`), line-level code audit in `src/apps/bot-worker/index.ts`
+Следующий шаг: Сделать Stabilization Sprint и коммитить не фичи, а последовательные remedation checkpoints по `docs/BOT_AUDIT_2026-03-30.md`.
+
+Дата и время: 2026-03-30 01:43
+Роль: P-BOT Universal Bot Architect
+Сделано: Выполнен свежий интернет-ресерч по рынку, Telegram/Groq/Cloudflare и конкурентному ландшафту Беларуси/Минска; подтверждено, что простое сравнение цен уже занято adjacent решениями, а реальную уникальность нужно строить на planner-driven assistant с profile + tools + grounded answers.
+Изменены файлы: docs/RESEARCH_LOG.md, docs/PROJECT_HISTORY.md
+Результат/доказательство: `docs/RESEARCH_LOG.md` + источники по `InfoPrice`, Telegram channels, Bot API, Groq Structured Outputs/Tool Use, Cloudflare Workers limits/pricing
+Следующий шаг: Перевести бот от эвристик к полноценному `LLM planner + tools + persistent user profile` и проверить UX на живых пользовательских диалогах.

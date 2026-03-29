@@ -161,3 +161,48 @@ _Последнее обновление: 2026-03-29 | Роль: P-DEPLOY Autono
 
 Источники:
 - https://github.com/actions/setup-node
+
+## [ТЕМА: Safe dietary heuristics for diagnosis-aware grocery suggestions]
+_Последнее обновление: 2026-03-30 | Роль: P-QA Quality Assurance Gate_
+Статус: Актуально
+
+- Для медицински чувствительных сценариев бот не должен обещать лечение или выдавать диагноз; безопаснее использовать формулировку `по составу выглядит более подходящим`, а не `можно всем при диагнозе`.
+- Для сахарного диабета безопасно учитывать явные сладкие/сиропные/кондитерские маркеры в составе как негативный сигнал при ранжировании, а не как абсолютный медицинский запрет.
+- Для гипертонии разумно учитывать повышенно солёные и ультра-переработанные продукты как caution-сигнал; в официальных рекомендациях DASH ключевой акцент идёт на снижение sodium.
+- Для целиакии и безглютенового режима допустимо делать жёсткий negative filter по явным словам `gluten`, `пшеница`, `рожь`, `ячмень`, если они встречаются в названии или составе.
+- Для непереносимости лактозы допустимо учитывать слова `лактоза`, `молоко`, `сыворотка`, `сливки` как high-risk маркеры, но не выдавать это за полноценную медицинскую консультацию.
+- Вывод: в production-боте лучше сочетать grounded retrieval, мягкие диетические эвристики и явный disclosure о том, что окончательная совместимость зависит от диагноза и полного состава.
+
+Источники:
+- https://www.nhlbi.nih.gov/education/dash-eating-plan
+- https://www.niddk.nih.gov/health-information/diabetes/overview/diet-eating-physical-activity
+- https://medlineplus.gov/celiacdisease.html
+- https://www.uhb.nhs.uk/media/f4ilokva/pi-nut-die-info-lactose-intolerance.pdf
+
+## [ТЕМА: March 2026 market + product direction for a truly smart Belarus grocery bot]
+_Последнее обновление: 2026-03-30 | Роль: P-BOT Universal Bot Architect_
+Статус: Актуально
+
+- На 2026-03-30 в Беларуси и Минске удалось подтвердить существование adjacent решений, но не найден явный массовый Telegram-бот, который одновременно делает grounded product search, ищет где дешевле, собирает корзину под бюджет и ещё учитывает ограничения по составу/диагнозу.
+- Подтверждён близкий конкурент по ценовому сравнению: `InfoPrice App` в App Store Беларусь описывает ежедневный сбор цен по сетям Беларуси и сценарии сравнения цен на продукты/доставку. Это сильный сигнал, что просто `сравнение цен` уже не уникально.
+- Подтверждены adjacent Telegram-каналы по скидкам и акциям Беларуси/Минска (`Slivki Minsk`, `Акции и листовки Беларусь`), но это в основном broadcast/promo format, а не conversational assistant с tool orchestration.
+- Актуальный технический вывод: уникальность надо строить не на ещё одном канале скидок и не на ещё одном price-comparison app, а на `LLM planner + tool execution + persistent health/budget profile + grounded catalog links`.
+- Telegram Bot API в актуальном changelog снова подтверждает inline/webhook возможности; для product assistant это значит, что conversational bot + inline share mode остаются правильным UX-комбо.
+- Groq docs на 2026-03-30 подтверждают Structured Outputs и Tool Use, но с важным ограничением: Structured Outputs фокусируются на schema compliance, а не на semantic accuracy; значит planner/tool layer всё равно нужно держать детерминированным и grounded.
+- Cloudflare Workers docs на 2026-03-30 подтверждают, что free HTTP invocations по-прежнему живут в `10 ms CPU` и `100,000 requests/day`, поэтому оркестрация должна быть компактной: не heavy agent loop в одном запросе, а 1 короткий planner + 1-3 tool executions + 1 final answer.
+- Вывод по продукту: чтобы бот выглядел реально умным, а не "фэйково умным", следующий сильный слой должен быть таким:
+  1. `planner` -> строгое JSON-решение что пользователь хочет;
+  2. `tool layer` -> search / compare / basket / composition ranking;
+  3. `user profile` -> бюджет, аллергии, диагнозы, blacklist, любимые магазины;
+  4. `session memory` -> уточнение без повторного ввода;
+  5. `grounded answer` -> только на реальных SKU и ссылках.
+
+Источники:
+- https://apps.apple.com/by/app/infoprice/id1512422887
+- https://telemetr.me/content/slivkiminsk
+- https://telemetr.me/content/akcii_skidki_belarus
+- https://core.telegram.org/bots/api-changelog
+- https://console.groq.com/docs/structured-outputs
+- https://console.groq.com/docs/tool-use/overview
+- https://developers.cloudflare.com/workers/platform/limits/
+- https://developers.cloudflare.com/workers/platform/pricing/

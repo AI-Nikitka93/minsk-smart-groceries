@@ -3,10 +3,12 @@ import { and, asc, desc, eq, isNull, lt, ne, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/libsql";
 import {
   canonicalProduct,
+  compositionProfile,
   currentOffer,
   parserCursor,
   priceHistory,
   store,
+  userProfile,
   type JsonObject,
 } from "./schema";
 import type { CanonicalCategory, CanonicalProduct, StoreName } from "../parsers/types";
@@ -125,6 +127,8 @@ export function createDatabase(env: DatabaseEnv) {
       currentOffer,
       priceHistory,
       parserCursor,
+      compositionProfile,
+      userProfile,
     },
   });
 }

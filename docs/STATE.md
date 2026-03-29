@@ -1,14 +1,16 @@
 # Current State
 
 - Goal: Move from approved architecture to deployable parser and Telegram bot workers for Smart Grocery Assistant.
-- Current task: Parser ingestion, Turso schema, bot/parser workers, public GitHub repo, and first deployment scaffolding are in place.
-- Status: IN_PROGRESS
+- Current task: Full audit of `bot-worker` quality and failure modes completed; the current Telegram bot is live but does not yet satisfy the intended product promise for exact shopping help and personalized basket intelligence.
+- Status: BLOCKED
 - Active step: `docs/EXEC_PLAN.md` step 10
-- Next step: Add real Cloudflare/GitHub secrets, deploy the bot worker once, then run live smoke tests for scheduled parser execution and Telegram webhook flows.
+- Next step: Execute Stabilization Sprint from `docs/BOT_AUDIT_2026-03-30.md`, starting with profile-only confirmations, exact-match cheapest gating, safe Telegram send fallback, and basket refusal/follow-up logic.
 - Blockers:
-  - GitHub Actions secrets are still missing for parser workflow.
-  - Cloudflare worker `minsk-smart-groceries-bot` has not been deployed yet, so Worker secrets cannot exist remotely yet.
+  - Core product behavior is not reliable enough for the intended promise: live logs show no-results on profile updates, irrelevant matches in cheapest-flow, and poor basket assembly.
+  - Parsed catalog coverage is too weak for several staple commodity terms (`масло`, `молоко`, `торт`, `гречка`), which limits downstream planner quality.
 - Artifacts:
+  - `.env.operator.local` (local ignored secret intake file)
+  - `docs/BOT_IDENTITY.md`
   - `drizzle.config.ts`
   - `src/db/schema.ts`
   - `src/db/repositories.ts`
@@ -16,6 +18,7 @@
   - `src/apps/parser-worker/index.ts`
   - `src/apps/parser-worker/cli.ts`
   - `wrangler.toml`
+  - `docs/BOT_AUDIT_2026-03-30.md`
   - `.github/workflows/parser.yml`
   - `package.json`
   - `tsconfig.json`

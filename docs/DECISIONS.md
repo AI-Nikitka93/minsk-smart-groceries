@@ -64,3 +64,18 @@
 - Decision: Deploy only `bot-worker` through Cloudflare Wrangler and run `parser-worker` from GitHub Actions via a Node.js CLI adapter.
 - Why: The parser was originally shaped around Cloudflare scheduled handlers, but the current delivery target explicitly splits webhook serving and parser cron, while public GitHub Actions provides a zero-cost hourly runner path.
 - Impact: `src/apps/parser-worker/cli.ts` becomes the bridge for local/CI cron execution, and parser secrets are stored in GitHub Actions rather than Cloudflare bindings.
+
+## 2026-03-29 - Use a neutral, user-first brand without store names
+- Decision: Use `Выгодная корзина Минск` as the primary public brand for the Telegram bot and channel, with all public copy avoiding names of specific store chains.
+- Why: The user wants a clear, friendly identity that explains the product immediately and stays independent from any one retailer.
+- Impact: Canonical naming and BotFather texts live in `docs/BOT_IDENTITY.md`, and only the confirmed Telegram usernames should later flow into runtime config.
+
+## 2026-03-30 - Use AI query rewrite plus diagnosis-aware scoring instead of raw LLM-only retrieval
+- Decision: Keep Turso as the source of truth for product search, but add a second-stage Groq query rewrite on complex or failed searches, plus diagnosis-aware heuristics that adjust ranking before the final assistant response.
+- Why: Free-form user phrases like `приготовить полезную корзину на 20 рублей при диабете` cannot be handled well by plain token search alone, while a pure LLM answer without grounded product retrieval would lose links and could hallucinate unsafe advice.
+- Impact: `src/apps/bot-worker/index.ts` now combines deterministic search, medical/dietary caution scoring, and Groq reasoning for baskets and constraint-aware explanations, while still avoiding unsupported medical promises.
+
+## 2026-03-30 - Make the bot stateful through a persistent user profile
+- Decision: Introduce a first persistent profile layer inside `user_profile`, so the bot can remember budget, diagnoses, allergies, excluded ingredients, and preferred stores between messages.
+- Why: Without memory, the bot remains a clever one-shot search interface rather than a personal grocery assistant.
+- Impact: Planner output can now update user context directly from natural language, and future basket/comparison flows can rely on stored profile data instead of re-asking everything each session.
