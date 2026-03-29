@@ -223,3 +223,10 @@
 Изменены файлы: AGENTS.md, src/apps/bot-worker/index.ts, docs/STATE.md, docs/state.json, docs/EXEC_PLAN.md, docs/DECISIONS.md, docs/RESEARCH_LOG.md, docs/PROJECT_HISTORY.md
 Результат/доказательство: `npm run typecheck` -> success; `npx wrangler deploy --config "wrangler.toml"` -> version `350782da-eded-44ad-a2dd-925c37a0a124`; `GET /health` -> `ok: true`; synthetic webhook smoke-tests (`у меня диабет и бюджет 30 рублей`, `где дешевле купить масло`, `собери корзину на 3 дня`) -> `hookStatus 200`, `delta=2`; research grounded in `console.groq.com/docs/tool-use/local-tool-calling`
 Следующий шаг: Получить живой пользовательский ретест по тем же трём запросам и затем либо закрыть step 13, либо углубить step 14 через более строгую schema validation и tool-result contracts.
+
+Дата и время: 2026-03-30 02:45
+Роль: P-BOT Universal Bot Architect
+Сделано: Усилен именно basket-path после живого ретеста: fallback basket queries стали более конкретными (`огурец`, `помидор`, `яйцо`, `яблоко`, `банан` вместо слишком широких или пустых категорий), а basket tool теперь собирает seed-позиции по каждому базовому запросу отдельно и только потом строит корзину.
+Изменены файлы: src/apps/bot-worker/index.ts, docs/STATE.md, docs/state.json, docs/PROJECT_HISTORY.md
+Результат/доказательство: `npm run typecheck` -> success; `npx wrangler deploy --config "wrangler.toml"` -> version `2477e9e1-5bfc-4c63-9ead-49138fbad330`; synthetic webhook smoke-test `собери корзину на 3 дня` -> `hookStatus 200`, `delta=2`
+Следующий шаг: Получить живой пользовательский ответ на `собери корзину на 3 дня` и `собери корзину на неделю при диабете`, затем решить, достаточно ли текущего basket-tool или нужен ещё category read-model.

@@ -1048,7 +1048,7 @@ async function executeBuildBasketTool(
     profileOnly: false,
     responseMode: "assistant",
   };
-  const products = await searchProductsForPlan(db, plan, intent);
+  const products = await collectBasketSeedProducts(db, queries, intent);
   const basket = assembleBudgetBasket(products, budgetMinor, intent);
 
   return {
@@ -1066,6 +1066,33 @@ async function executeBuildBasketTool(
         : buildBasketFollowUpMessage(userQuery, basket.reason),
     },
   };
+}
+
+async function collectBasketSeedProducts(
+  db: ReturnType<typeof createDatabase>,
+  queries: string[],
+  intent: SearchIntent,
+): Promise<AssistantProductRow[]> {
+  const combined: AssistantProductRow[] = [];
+
+  for (const query of queries.slice(0, 8)) {
+    const queryIntent: SearchIntent = {
+      ...buildSearchIntent(query),
+      budgetMinor: intent.budgetMinor,
+      wantsBasket: true,
+      wantsHealthy: intent.wantsHealthy,
+      wantsDiagnosisAdvice: intent.wantsDiagnosisAdvice,
+      diagnosisContext: intent.diagnosisContext,
+      preferredStores: intent.preferredStores,
+      excludedIngredients: intent.excludedIngredients,
+      healthGoals: intent.healthGoals,
+    };
+    const rows = await searchProducts(db, query, 8);
+    const strictRows = filterBasketSeedMatches(rows, queryIntent);
+    combined.push(...(strictRows.length > 0 ? strictRows.slice(0, 2) : rows.slice(0, 2)));
+  }
+
+  return dedupeOffers(combined);
 }
 
 async function executeAnalyzeCompositionTool(
@@ -1816,6 +1843,13 @@ function filterStrictCheapestMatches(
 
     return false;
   });
+}
+
+function filterBasketSeedMatches(
+  rows: AssistantProductRow[],
+  intent: SearchIntent,
+): AssistantProductRow[] {
+  return filterStrictCheapestMatches(rows, intent).filter((row) => !shouldRejectBasketCandidate(row, intent));
 }
 
 function buildSearchIntent(query: string, profile?: PersistedUserProfile | null): SearchIntent {
@@ -2596,20 +2630,20 @@ function mergeProfilePatch(
 
 function buildFallbackBasketQueries(intent: SearchIntent): string[] {
   const base = intent.wantsHealthy || intent.wantsDiagnosisAdvice
-    ? ["гречка", "овсянка", "курица", "яйца", "овощи", "йогурт"]
-    : ["гречка", "макароны", "курица", "сыр", "овощи", "хлеб"];
+    ? ["гречка", "овсянка", "курица", "яйцо", "огурец", "помидор"]
+    : ["гречка", "макароны", "курица", "сыр", "огурец", "хлеб"];
 
   const withDietBias = [...base];
   if (intent.diagnosisContext.keys.includes("diabetes")) {
-    return ["гречка", "овсянка", "яйца", "курица", "овощи", "кефир"];
+    return ["гречка", "овсянка", "яйцо", "курица", "огурец", "помидор"];
   }
 
   if (intent.diagnosisContext.keys.includes("lactose_intolerance")) {
-    return ["гречка", "курица", "яйца", "овощи", "рис", "яблоки"];
+    return ["гречка", "курица", "яйцо", "огурец", "рис", "яблоко"];
   }
 
   if (intent.diagnosisContext.keys.includes("gastritis")) {
-    return ["овсянка", "рис", "гречка", "курица", "бананы", "кефир"];
+    return ["овсянка", "рис", "гречка", "курица", "банан", "яйцо"];
   }
 
   return withDietBias;
