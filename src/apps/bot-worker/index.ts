@@ -292,6 +292,7 @@ const COMMODITY_READ_MODELS = [
 type CommodityReadModel = (typeof COMMODITY_READ_MODELS)[number];
 type DiagnosisRule = (typeof DIAGNOSIS_RULES)[number];
 type DiagnosisKey = DiagnosisRule["key"];
+type SessionAction = PlannedAction | "save_profile" | "clarify";
 
 interface DiagnosisContext {
   keys: DiagnosisKey[];
@@ -423,6 +424,7 @@ interface SearchIntent {
 }
 
 type PlannedAction = "search" | "find_cheapest" | "build_basket" | "diagnosis_safe";
+type PlanningConfidence = "low" | "medium" | "high";
 
 interface UserProfilePatch {
   budgetMinor?: number | null;
@@ -443,7 +445,27 @@ interface BotRequestPlan {
   wantsBasket: boolean;
   profileOnly: boolean;
   responseMode: "direct" | "assistant";
+  planningConfidence: PlanningConfidence;
+  needsClarification: boolean;
+  clarificationQuestion: string | null;
   profilePatch?: UserProfilePatch;
+}
+
+interface SessionContext {
+  lastUserQuery: string | null;
+  lastAction: SessionAction | null;
+  lastCatalogQueries: string[];
+  lastClarificationQuestion: string | null;
+  lastOutcomeStatus: string | null;
+  updatedAt: string | null;
+}
+
+interface SessionContextPatch {
+  lastUserQuery: string;
+  lastAction: SessionAction;
+  lastCatalogQueries?: string[];
+  lastClarificationQuestion?: string | null;
+  lastOutcomeStatus?: string | null;
 }
 
 interface PersistedUserProfile {
@@ -458,12 +480,14 @@ interface PersistedUserProfile {
   allergies: string[];
   diagnoses: string[];
   healthGoals: string[];
+  sessionContext: SessionContext;
 }
 
 interface AgenticReply {
   text: string;
   parseMode?: string;
   replyMarkup?: Record<string, unknown>;
+  sessionPatch?: SessionContextPatch;
 }
 
 interface AgenticToolOutcome {
@@ -472,6 +496,7 @@ interface AgenticToolOutcome {
   updatedProfile?: PersistedUserProfile | null;
   replyMarkup?: Record<string, unknown>;
   parseMode?: string;
+  sessionPatch?: SessionContextPatch;
 }
 
 let cachedDatabase: ReturnType<typeof createDatabase> | null = null;
@@ -552,32 +577,78 @@ async function processTelegramUpdate(update: TelegramUpdate, env: BotWorkerEnv):
   }
 }
 
+async function sendTelegramReply(
+  env: BotWorkerEnv,
+  db: ReturnType<typeof createDatabase>,
+  message: TelegramMessage,
+  text: string,
+  currentProfile: PersistedUserProfile | null,
+  options?: {
+    replyMarkup?: Record<string, unknown>;
+    parseMode?: string;
+    sessionPatch?: SessionContextPatch;
+  },
+): Promise<PersistedUserProfile | null> {
+  await sendTelegramText(
+    env,
+    message.chat.id,
+    text,
+    options?.replyMarkup,
+    options?.parseMode,
+  );
+
+  if (message.from && options?.sessionPatch) {
+    return saveSessionContext(db, message.from, currentProfile, options.sessionPatch);
+  }
+
+  return currentProfile;
+}
+
 async function handleMessage(message: TelegramMessage, env: BotWorkerEnv): Promise<void> {
   const text = message.text?.trim();
   if (!text) {
-    await sendTelegramText(
+    const db = getDatabase(env);
+    await sendTelegramReply(
       env,
-      message.chat.id,
+      db,
+      message,
       "Пока я понимаю только текстовые запросы. Напишите, например: Где дешевле купить молоко?",
+      null,
+      {
+        sessionPatch: buildSessionPatch("empty-text", "clarify", {
+          clarificationQuestion: "Какой продукт или задачу по покупкам вы хотите решить?",
+          outcomeStatus: "needs_clarification",
+        }),
+      },
     );
     return;
   }
 
+  const db = getDatabase(env);
   if (text === "/start" || text.startsWith("/start ")) {
-    await sendTelegramText(env, message.chat.id, buildStartMessage(env));
+    await sendTelegramReply(env, db, message, buildStartMessage(env), null, {
+      sessionPatch: buildSessionPatch(text, "clarify", {
+        clarificationQuestion: "Что ищем: товар, где дешевле, корзину или подбор под ограничения?",
+        outcomeStatus: "start",
+      }),
+    });
     return;
   }
 
-  const db = getDatabase(env);
   const persistedProfile = message.from ? await getPersistedUserProfile(db, message.from) : null;
   const agenticReply = await runAgenticAssistant(env, db, message, persistedProfile);
   if (agenticReply) {
-    await sendTelegramText(
+    await sendTelegramReply(
       env,
-      message.chat.id,
+      db,
+      message,
       agenticReply.text,
-      agenticReply.replyMarkup,
-      agenticReply.parseMode,
+      persistedProfile,
+      {
+        replyMarkup: agenticReply.replyMarkup,
+        parseMode: agenticReply.parseMode,
+        sessionPatch: agenticReply.sessionPatch,
+      },
     );
     return;
   }
@@ -608,7 +679,21 @@ async function handleMessage(message: TelegramMessage, env: BotWorkerEnv): Promi
   }
 
   if (isProfileUpdateOnlyQuery(text, plan, intent)) {
-    await sendTelegramText(env, message.chat.id, buildProfileSavedMessage(effectiveProfile));
+    await sendTelegramReply(env, db, message, buildProfileSavedMessage(effectiveProfile), effectiveProfile, {
+      sessionPatch: buildSessionPatch(text, "save_profile", {
+        outcomeStatus: "ok",
+      }),
+    });
+    return;
+  }
+
+  if (plan.needsClarification && plan.clarificationQuestion) {
+    await sendTelegramReply(env, db, message, plan.clarificationQuestion, effectiveProfile, {
+      sessionPatch: buildSessionPatch(text, "clarify", {
+        clarificationQuestion: plan.clarificationQuestion,
+        outcomeStatus: "needs_clarification",
+      }),
+    });
     return;
   }
 
@@ -633,7 +718,13 @@ async function handleMessage(message: TelegramMessage, env: BotWorkerEnv): Promi
   if (plan.wantsBasket) {
     const basketResult = assembleBudgetBasket(products, plan.budgetMinor, null, intent);
     if (!basketResult.reliable) {
-      await sendTelegramText(env, message.chat.id, buildBasketFollowUpMessage(text, basketResult.reason));
+      const followUpText = buildBasketFollowUpMessage(text, basketResult.reason);
+      await sendTelegramReply(env, db, message, followUpText, effectiveProfile, {
+        sessionPatch: buildSessionPatch(text, "clarify", {
+          clarificationQuestion: buildBasketClarificationQuestion(basketResult.reason),
+          outcomeStatus: "needs_clarification",
+        }),
+      });
       return;
     }
 
@@ -642,36 +733,65 @@ async function handleMessage(message: TelegramMessage, env: BotWorkerEnv): Promi
 
   if (products.length === 0) {
     if (message.from && hasProfilePatch(plan.profilePatch) && intent.searchTerms.length === 0) {
-      await sendTelegramText(env, message.chat.id, buildProfileSavedMessage(effectiveProfile));
+      await sendTelegramReply(env, db, message, buildProfileSavedMessage(effectiveProfile), effectiveProfile, {
+        sessionPatch: buildSessionPatch(text, "save_profile", {
+          outcomeStatus: "ok",
+        }),
+      });
       return;
     }
 
     if (plan.compareCheapest && intent.searchTerms.length > 0) {
-      await sendTelegramText(
+      await sendTelegramReply(
         env,
-        message.chat.id,
+        db,
+        message,
         buildCheapestMissMessage(text, intent.searchTerms),
-        buildCheapestMissKeyboard(intent.searchTerms),
+        effectiveProfile,
+        {
+          replyMarkup: buildCheapestMissKeyboard(intent.searchTerms),
+          sessionPatch: buildSessionPatch(text, "find_cheapest", {
+            catalogQueries: intent.searchTerms,
+            clarificationQuestion: buildCheapestClarificationQuestion(intent.searchTerms),
+            outcomeStatus: "needs_clarification",
+          }),
+        },
       );
       return;
     }
 
-    await sendTelegramText(
+    await sendTelegramReply(
       env,
-      message.chat.id,
+      db,
+      message,
       buildNoResultsMessage(text),
-      buildNoResultsKeyboard(),
+      effectiveProfile,
+      {
+        replyMarkup: buildNoResultsKeyboard(),
+        sessionPatch: buildSessionPatch(text, plan.action, {
+          catalogQueries: plan.catalogQueries,
+          clarificationQuestion: buildSearchClarificationQuestion(text),
+          outcomeStatus: "no_results",
+        }),
+      },
     );
       return;
   }
 
   const replyText = await buildAssistantReply(env, text, queryForSearch, products, intent, plan);
-  await sendTelegramText(
+  await sendTelegramReply(
     env,
-    message.chat.id,
+    db,
+    message,
     replyText,
-    undefined,
-    shouldUseMarkdownReply(intent) ? "Markdown" : undefined,
+    effectiveProfile,
+    {
+      parseMode: shouldUseMarkdownReply(intent) ? "Markdown" : undefined,
+      sessionPatch: buildSessionPatch(text, plan.action, {
+        catalogQueries: plan.catalogQueries.length > 0 ? plan.catalogQueries : intent.searchTerms,
+        outcomeStatus: "ok",
+      }),
+    },
   );
 }
 
@@ -694,12 +814,13 @@ async function runAgenticAssistant(
         "Ты главный AI-ассистент продуктового Telegram-бота для Минска.",
         "Твоя задача: понять сообщение пользователя и СНАЧАЛА вызвать подходящий инструмент, а уже потом отвечать.",
         "Не выдумывай товары, цены, составы, скидки, ссылки, профиль пользователя или диагнозы.",
+        "Учитывай currentSession: это краткая память о прошлом ходе, она помогает не терять контекст, но не отменяет проверку инструментами.",
         "Если пользователь сообщает предпочтения, бюджет, аллергию или диагноз, используй tool save_user_profile.",
         "Если пользователь спрашивает, где дешевле товар, используй tool find_cheapest_offer.",
         "Если пользователь просит обычный поиск товара или ссылки, используй tool search_products.",
         "Если пользователь просит корзину, используй tool build_budget_basket.",
         "Если пользователь спрашивает, что можно при диагнозе или хочет безопасный/здоровый вариант, используй tool analyze_composition.",
-        "Если инструмент сообщает, что точного товара нет или корзина слабая, не притворяйся умным: честно попроси одно уточнение.",
+        "Если инструмент сообщает status=needs_clarification, задай одно короткое уточнение и не притворяйся, что задача решена.",
         "Отвечай только по-русски.",
         "Формат ответа: короткий заголовок, затем список или 1-2 абзаца.",
         "Для товаров обязательно указывай цену, магазин и прямую ссылку.",
@@ -712,6 +833,7 @@ async function runAgenticAssistant(
         {
           query: userQuery,
           currentProfile: serializeProfileForModel(persistedProfile),
+          currentSession: persistedProfile?.sessionContext ?? emptySessionContext(),
         },
         null,
         2,
@@ -747,6 +869,7 @@ async function runAgenticAssistant(
             text: finalText,
             parseMode: lastToolOutcome?.parseMode ?? "Markdown",
             replyMarkup: lastToolOutcome?.replyMarkup,
+            sessionPatch: lastToolOutcome?.sessionPatch,
           };
         }
 
@@ -929,28 +1052,42 @@ async function executeAgentToolCall(
   profile: PersistedUserProfile | null,
   userQuery: string,
 ): Promise<AgenticToolOutcome> {
-  const args = parseToolArguments(toolCall.function.arguments);
+  const rawArgs = parseToolArguments(toolCall.function.arguments);
+  const args = normalizeToolCallArguments(toolCall.function.name, rawArgs, profile, userQuery);
 
+  let outcome: AgenticToolOutcome;
   switch (toolCall.function.name) {
     case "save_user_profile":
-      return executeSaveUserProfileTool(db, telegramUser, profile, args);
+      outcome = await executeSaveUserProfileTool(db, telegramUser, profile, args, userQuery);
+      break;
     case "search_products":
-      return executeSearchProductsTool(db, profile, args);
+      outcome = await executeSearchProductsTool(db, profile, args, userQuery);
+      break;
     case "find_cheapest_offer":
-      return executeFindCheapestTool(db, profile, args);
+      outcome = await executeFindCheapestTool(db, profile, args, userQuery);
+      break;
     case "build_budget_basket":
-      return executeBuildBasketTool(db, profile, userQuery, args);
+      outcome = await executeBuildBasketTool(db, profile, userQuery, args);
+      break;
     case "analyze_composition":
-      return executeAnalyzeCompositionTool(db, profile, args);
+      outcome = await executeAnalyzeCompositionTool(db, profile, args, userQuery);
+      break;
     default:
-      return {
+      outcome = {
         name: toolCall.function.name,
         payload: {
           status: "error",
           message: `Unknown tool: ${toolCall.function.name}`,
+          clarificationQuestion: buildSearchClarificationQuestion(userQuery),
         },
+        sessionPatch: buildSessionPatch(userQuery, "clarify", {
+          clarificationQuestion: buildSearchClarificationQuestion(userQuery),
+          outcomeStatus: "error",
+        }),
       };
   }
+
+  return validateAgentToolOutcome(outcome, userQuery);
 }
 
 function parseToolArguments(rawArguments: string): Record<string, unknown> {
@@ -966,11 +1103,127 @@ function parseToolArguments(rawArguments: string): Record<string, unknown> {
   return {};
 }
 
+function normalizeToolCallArguments(
+  toolName: string,
+  args: Record<string, unknown>,
+  profile: PersistedUserProfile | null,
+  userQuery: string,
+): Record<string, unknown> {
+  const fallbackIntent = buildSearchIntent(userQuery, profile);
+  const fallbackQuery = fallbackIntent.searchTerms.join(" ").trim();
+
+  switch (toolName) {
+    case "save_user_profile":
+      return {
+        budgetRub: typeof args.budgetRub === "number" ? args.budgetRub : null,
+        preferredStores: Array.isArray(args.preferredStores) ? args.preferredStores : [],
+        excludedIngredients: Array.isArray(args.excludedIngredients) ? args.excludedIngredients : [],
+        allergies: Array.isArray(args.allergies) ? args.allergies : [],
+        diagnoses: Array.isArray(args.diagnoses) ? args.diagnoses : [],
+        healthGoals: Array.isArray(args.healthGoals) ? args.healthGoals : [],
+      };
+    case "search_products":
+    case "find_cheapest_offer":
+    case "analyze_composition": {
+      const productQuery = typeof args.productQuery === "string"
+        ? normalizeQuery(args.productQuery)
+        : fallbackQuery;
+      return {
+        ...args,
+        productQuery,
+        limit: clampToolLimit(args.limit),
+      };
+    }
+    case "build_budget_basket": {
+      const productQueries = Array.isArray(args.productQueries)
+        ? normalizeStringList(args.productQueries.map((value) => String(value)))
+        : [];
+      return {
+        ...args,
+        productQueries,
+        durationDays:
+          typeof args.durationDays === "number" && Number.isFinite(args.durationDays) && args.durationDays > 0
+            ? Math.min(14, Math.round(args.durationDays))
+            : null,
+        budgetRub:
+          typeof args.budgetRub === "number" && Number.isFinite(args.budgetRub) && args.budgetRub > 0
+            ? args.budgetRub
+            : null,
+      };
+    }
+    default:
+      return args;
+  }
+}
+
+function validateAgentToolOutcome(
+  outcome: AgenticToolOutcome,
+  userQuery: string,
+): AgenticToolOutcome {
+  const status = typeof outcome.payload.status === "string" ? outcome.payload.status : "ok";
+  const clarificationQuestion =
+    typeof outcome.payload.clarificationQuestion === "string"
+      ? outcome.payload.clarificationQuestion
+      : status === "needs_clarification" || status === "no_results"
+        ? buildSearchClarificationQuestion(userQuery)
+        : null;
+
+  const nextPayload: Record<string, unknown> = {
+    ...outcome.payload,
+    status,
+  };
+
+  if (clarificationQuestion) {
+    nextPayload.clarificationQuestion = clarificationQuestion;
+  }
+
+  const nextSessionPatch = outcome.sessionPatch ??
+    buildSessionPatch(
+      userQuery,
+      status === "needs_clarification" ? "clarify" : mapToolNameToSessionAction(outcome.name),
+      {
+        catalogQueries: extractQueriesFromToolPayload(nextPayload),
+        clarificationQuestion,
+        outcomeStatus: status,
+      },
+    );
+
+  return {
+    ...outcome,
+    payload: nextPayload,
+    sessionPatch: nextSessionPatch,
+  };
+}
+
+function mapToolNameToSessionAction(toolName: string): SessionAction {
+  switch (toolName) {
+    case "save_user_profile":
+      return "save_profile";
+    case "find_cheapest_offer":
+      return "find_cheapest";
+    case "build_budget_basket":
+      return "build_basket";
+    case "analyze_composition":
+      return "diagnosis_safe";
+    default:
+      return "search";
+  }
+}
+
+function extractQueriesFromToolPayload(payload: Record<string, unknown>): string[] {
+  const query = typeof payload.query === "string" ? [payload.query] : [];
+  const productQueries = Array.isArray(payload.productQueries)
+    ? payload.productQueries.map((value) => String(value))
+    : [];
+  return normalizeStringList([...query, ...productQueries]);
+}
+
 async function executeSaveUserProfileTool(
   db: ReturnType<typeof createDatabase>,
   telegramUser: TelegramUser | null,
   profile: PersistedUserProfile | null,
   args: Record<string, unknown>,
+  userQuery: string,
 ): Promise<AgenticToolOutcome> {
   const patch = normalizeProfilePatch({
     budgetRub: typeof args.budgetRub === "number" ? args.budgetRub : null,
@@ -991,6 +1244,9 @@ async function executeSaveUserProfileTool(
         fallbackText: buildProfileSavedMessage(fallbackProfile),
       },
       updatedProfile: fallbackProfile,
+      sessionPatch: buildSessionPatch(userQuery, "save_profile", {
+        outcomeStatus: "noop",
+      }),
     };
   }
 
@@ -1003,6 +1259,9 @@ async function executeSaveUserProfileTool(
       fallbackText: buildProfileSavedMessage(updatedProfile),
     },
     updatedProfile,
+    sessionPatch: buildSessionPatch(userQuery, "save_profile", {
+      outcomeStatus: "ok",
+    }),
   };
 }
 
@@ -1010,6 +1269,7 @@ async function executeSearchProductsTool(
   db: ReturnType<typeof createDatabase>,
   profile: PersistedUserProfile | null,
   args: Record<string, unknown>,
+  userQuery: string,
 ): Promise<AgenticToolOutcome> {
   const productQuery = typeof args.productQuery === "string" ? args.productQuery.trim() : "";
   const limit = clampToolLimit(args.limit);
@@ -1030,6 +1290,9 @@ async function executeSearchProductsTool(
     wantsBasket: false,
     profileOnly: false,
     responseMode: "assistant",
+    planningConfidence: productQuery ? "high" : "low",
+    needsClarification: productQuery.length === 0,
+    clarificationQuestion: productQuery.length === 0 ? buildSearchClarificationQuestion(userQuery) : null,
   };
   const products = productQuery ? await searchProductsForPlan(db, plan, intent) : [];
 
@@ -1039,6 +1302,7 @@ async function executeSearchProductsTool(
       status: products.length > 0 ? "ok" : "no_results",
       query: productQuery,
       products: products.slice(0, limit).map(serializeProductForModel),
+      clarificationQuestion: products.length > 0 ? null : buildSearchClarificationQuestion(productQuery || userQuery),
       fallbackText:
         products.length > 0
           ? buildDirectProductReply(productQuery, products.slice(0, limit), intent)
@@ -1052,6 +1316,7 @@ async function executeFindCheapestTool(
   db: ReturnType<typeof createDatabase>,
   profile: PersistedUserProfile | null,
   args: Record<string, unknown>,
+  userQuery: string,
 ): Promise<AgenticToolOutcome> {
   const productQuery = typeof args.productQuery === "string" ? args.productQuery.trim() : "";
   const limit = clampToolLimit(args.limit);
@@ -1066,6 +1331,9 @@ async function executeFindCheapestTool(
     wantsBasket: false,
     profileOnly: false,
     responseMode: "assistant",
+    planningConfidence: productQuery ? "high" : "low",
+    needsClarification: productQuery.length === 0,
+    clarificationQuestion: productQuery.length === 0 ? buildCheapestClarificationQuestion(intent.searchTerms) : null,
   };
   const products = productQuery ? await searchProductsForPlan(db, plan, intent) : [];
 
@@ -1076,6 +1344,7 @@ async function executeFindCheapestTool(
       query: productQuery,
       exactMatchFound: products.length > 0,
       products: products.slice(0, limit).map(serializeProductForModel),
+      clarificationQuestion: products.length > 0 ? null : buildCheapestClarificationQuestion(intent.searchTerms),
       fallbackText:
         products.length > 0
           ? buildCheapestReply(productQuery, products.slice(0, limit), intent)
@@ -1116,6 +1385,9 @@ async function executeBuildBasketTool(
     wantsBasket: true,
     profileOnly: false,
     responseMode: "assistant",
+    planningConfidence: queries.length >= 3 ? "high" : "medium",
+    needsClarification: false,
+    clarificationQuestion: null,
   };
   const products = await collectBasketSeedProducts(db, queries, intent);
   const basket = assembleBudgetBasket(products, budgetMinor, durationDays, intent);
@@ -1130,6 +1402,7 @@ async function executeBuildBasketTool(
       productQueries: queries,
       products: basket.items.map(serializeProductForModel),
       reason: basket.reason,
+      clarificationQuestion: basket.reliable ? null : buildBasketClarificationQuestion(basket.reason),
       quality: {
         reliable: basket.reliable,
         familyCount: basket.familyCount,
@@ -1174,6 +1447,7 @@ async function executeAnalyzeCompositionTool(
   db: ReturnType<typeof createDatabase>,
   profile: PersistedUserProfile | null,
   args: Record<string, unknown>,
+  userQuery: string,
 ): Promise<AgenticToolOutcome> {
   const productQuery = typeof args.productQuery === "string" ? args.productQuery.trim() : "";
   const limit = clampToolLimit(args.limit);
@@ -1193,6 +1467,9 @@ async function executeAnalyzeCompositionTool(
     wantsBasket: false,
     profileOnly: false,
     responseMode: "assistant",
+    planningConfidence: productQuery ? "high" : "medium",
+    needsClarification: productQuery.length === 0,
+    clarificationQuestion: productQuery.length === 0 ? buildSearchClarificationQuestion(userQuery) : null,
   };
   const products = productQuery ? await searchProductsForPlan(db, plan, intent) : [];
 
@@ -1202,6 +1479,8 @@ async function executeAnalyzeCompositionTool(
       status: products.length > 0 ? "ok" : "needs_clarification",
       query: productQuery,
       diagnoses: intent.diagnosisContext.labels,
+      clarificationQuestion:
+        products.length > 0 ? null : buildSearchClarificationQuestion(productQuery || userQuery),
       products: products.slice(0, limit).map((product) => ({
         ...serializeProductForModel(product),
         reasons: buildSuitabilityReason(product, intent),
@@ -1250,6 +1529,31 @@ function serializeProfileForModel(profile: PersistedUserProfile | null): Record<
     allergies: profile.allergies,
     diagnoses: profile.diagnoses,
     healthGoals: profile.healthGoals,
+    sessionContext: {
+      lastUserQuery: profile.sessionContext.lastUserQuery,
+      lastAction: profile.sessionContext.lastAction,
+      lastCatalogQueries: profile.sessionContext.lastCatalogQueries,
+      lastClarificationQuestion: profile.sessionContext.lastClarificationQuestion,
+      lastOutcomeStatus: profile.sessionContext.lastOutcomeStatus,
+    },
+  };
+}
+
+function buildSessionPatch(
+  userQuery: string,
+  action: SessionAction,
+  options?: {
+    catalogQueries?: string[];
+    clarificationQuestion?: string | null;
+    outcomeStatus?: string | null;
+  },
+): SessionContextPatch {
+  return {
+    lastUserQuery: userQuery,
+    lastAction: action,
+    lastCatalogQueries: normalizeStringList(options?.catalogQueries ?? []),
+    lastClarificationQuestion: options?.clarificationQuestion ?? null,
+    lastOutcomeStatus: options?.outcomeStatus ?? null,
   };
 }
 
@@ -1322,6 +1626,7 @@ async function callGroqAgenticSynthesis(
               "Сформируй живой, полезный и человеческий ответ только на основе этих данных.",
               "Не упоминай инструменты, tool calls, JSON, status fields или внутренние поля.",
               "Не копируй механические фразы вроде fallbackText и не отвечай сухими шаблонами.",
+              "Если в toolResults есть clarificationQuestion или status=needs_clarification, задай именно один короткий уточняющий вопрос и не делай вид, что задача уже решена.",
               "Если сохранён профиль пользователя, коротко подтвердить, что именно запомнено, и подсказать следующий естественный шаг.",
               "Если нашли товары, объясни выбор как умный продуктовый ассистент: цена, магазин, ссылка, а при необходимости состав и почему вариант лучше.",
               "Если запрос был про корзину, собери осмысленный список и коротко объясни логику подбора.",
@@ -1437,6 +1742,7 @@ async function getPersistedUserProfile(
 
   const settings = asPlainObject(row.notificationSettings);
   const profileContext = asPlainObject(settings.profileContext);
+  const sessionContext = normalizeSessionContext(asPlainObject(settings.sessionContext));
 
   return {
     telegramUserId: row.telegramUserId,
@@ -1450,6 +1756,63 @@ async function getPersistedUserProfile(
     allergies: asStringArray(row.allergies),
     diagnoses: asStringArray(profileContext.diagnoses),
     healthGoals: asStringArray(profileContext.healthGoals),
+    sessionContext,
+  };
+}
+
+function emptySessionContext(): SessionContext {
+  return {
+    lastUserQuery: null,
+    lastAction: null,
+    lastCatalogQueries: [],
+    lastClarificationQuestion: null,
+    lastOutcomeStatus: null,
+    updatedAt: null,
+  };
+}
+
+function normalizeSessionContext(value: Record<string, unknown>): SessionContext {
+  const action = value.lastAction;
+  return {
+    lastUserQuery: typeof value.lastUserQuery === "string" ? value.lastUserQuery : null,
+    lastAction:
+      action === "search" || action === "find_cheapest" || action === "build_basket" || action === "diagnosis_safe" ||
+        action === "save_profile" || action === "clarify"
+        ? action
+        : null,
+    lastCatalogQueries: asStringArray(value.lastCatalogQueries),
+    lastClarificationQuestion:
+      typeof value.lastClarificationQuestion === "string" ? value.lastClarificationQuestion : null,
+    lastOutcomeStatus: typeof value.lastOutcomeStatus === "string" ? value.lastOutcomeStatus : null,
+    updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : null,
+  };
+}
+
+function mergeSessionContext(
+  current: SessionContext,
+  patch: SessionContextPatch,
+  nowIso: string,
+): SessionContext {
+  return {
+    lastUserQuery: patch.lastUserQuery,
+    lastAction: patch.lastAction,
+    lastCatalogQueries: normalizeStringList(patch.lastCatalogQueries ?? []),
+    lastClarificationQuestion: patch.lastClarificationQuestion ?? null,
+    lastOutcomeStatus: patch.lastOutcomeStatus ?? null,
+    updatedAt: nowIso,
+  };
+}
+
+function buildNotificationSettings(
+  profile: PersistedUserProfile,
+  sessionContext: SessionContext,
+): Record<string, unknown> {
+  return {
+    profileContext: {
+      diagnoses: profile.diagnoses,
+      healthGoals: profile.healthGoals,
+    },
+    sessionContext,
   };
 }
 
@@ -1476,12 +1839,7 @@ async function upsertPersistedUserProfile(
       excludedIngredients: merged.excludedIngredients,
       allergies: merged.allergies,
       dislikedCategories: [],
-      notificationSettings: {
-        profileContext: {
-          diagnoses: merged.diagnoses,
-          healthGoals: merged.healthGoals,
-        },
-      },
+      notificationSettings: buildNotificationSettings(merged, previous?.sessionContext ?? emptySessionContext()),
       botOptIn: true,
       channelOptIn: true,
       active: true,
@@ -1500,18 +1858,84 @@ async function upsertPersistedUserProfile(
         preferredStores: merged.preferredStores,
         excludedIngredients: merged.excludedIngredients,
         allergies: merged.allergies,
-        notificationSettings: {
-          profileContext: {
-            diagnoses: merged.diagnoses,
-            healthGoals: merged.healthGoals,
-          },
-        },
+        notificationSettings: buildNotificationSettings(merged, previous?.sessionContext ?? emptySessionContext()),
         updatedAt: now,
         lastSeenAt: now,
       },
     });
 
   return merged;
+}
+
+async function saveSessionContext(
+  db: ReturnType<typeof createDatabase>,
+  telegramUser: TelegramUser,
+  previous: PersistedUserProfile | null,
+  patch: SessionContextPatch,
+): Promise<PersistedUserProfile> {
+  const now = new Date().toISOString().replace("T", " ").slice(0, 19);
+  const baseProfile: PersistedUserProfile = previous ?? {
+    telegramUserId: telegramUser.id,
+    username: telegramUser.username ?? null,
+    firstName: telegramUser.first_name ?? null,
+    lastName: null,
+    languageCode: telegramUser.language_code ?? null,
+    budgetMinor: null,
+    preferredStores: [],
+    excludedIngredients: [],
+    allergies: [],
+    diagnoses: [],
+    healthGoals: [],
+    sessionContext: emptySessionContext(),
+  };
+  const nextProfile: PersistedUserProfile = {
+    ...baseProfile,
+    username: telegramUser.username ?? baseProfile.username,
+    firstName: telegramUser.first_name ?? baseProfile.firstName,
+    languageCode: telegramUser.language_code ?? baseProfile.languageCode,
+    sessionContext: mergeSessionContext(baseProfile.sessionContext, patch, now),
+  };
+
+  await db
+    .insert(userProfile)
+    .values({
+      telegramUserId: telegramUser.id,
+      username: nextProfile.username,
+      firstName: nextProfile.firstName,
+      lastName: nextProfile.lastName,
+      languageCode: nextProfile.languageCode,
+      timezone: "Europe/Minsk",
+      budgetMinor: nextProfile.budgetMinor,
+      preferredStores: nextProfile.preferredStores,
+      excludedIngredients: nextProfile.excludedIngredients,
+      allergies: nextProfile.allergies,
+      dislikedCategories: [],
+      notificationSettings: buildNotificationSettings(nextProfile, nextProfile.sessionContext),
+      botOptIn: true,
+      channelOptIn: true,
+      active: true,
+      createdAt: now,
+      updatedAt: now,
+      lastSeenAt: now,
+    })
+    .onConflictDoUpdate({
+      target: userProfile.telegramUserId,
+      set: {
+        username: nextProfile.username,
+        firstName: nextProfile.firstName,
+        lastName: nextProfile.lastName,
+        languageCode: nextProfile.languageCode,
+        budgetMinor: nextProfile.budgetMinor,
+        preferredStores: nextProfile.preferredStores,
+        excludedIngredients: nextProfile.excludedIngredients,
+        allergies: nextProfile.allergies,
+        notificationSettings: buildNotificationSettings(nextProfile, nextProfile.sessionContext),
+        updatedAt: now,
+        lastSeenAt: now,
+      },
+    });
+
+  return nextProfile;
 }
 
 function resolveAssistantProductLimit(intent: SearchIntent): number {
@@ -2315,6 +2739,10 @@ function buildNoResultsMessage(userQuery: string): string {
   ].join("\n");
 }
 
+function buildSearchClarificationQuestion(userQuery: string): string {
+  return `Уточните продукт точнее для запроса «${userQuery}»: бренд, жирность, объём, вкус или тип упаковки.`;
+}
+
 function buildCheapestMissMessage(userQuery: string, searchTerms: string[]): string {
   const productHint = searchTerms.join(" ").trim() || userQuery;
   return [
@@ -2323,6 +2751,11 @@ function buildCheapestMissMessage(userQuery: string, searchTerms: string[]): str
     `Пока в базе нет уверенного точного совпадения для "${productHint}".`,
     "Попробуйте уточнить товар, например: масло сливочное, масло оливковое, молоко 2.5%, сыр гауда.",
   ].join("\n");
+}
+
+function buildCheapestClarificationQuestion(searchTerms: string[]): string {
+  const base = searchTerms.join(" ").trim() || "товар";
+  return `Уточните, пожалуйста, какой именно ${base} нужен: сливочное, подсолнечное, оливковое, 2.5%, 1 л, бренд или упаковка?`;
 }
 
 function buildCheapestMissKeyboard(searchTerms: string[]): Record<string, unknown> {
@@ -2411,6 +2844,14 @@ function buildBasketFollowUpMessage(userQuery: string, reason: string): string {
     "• бюджетная корзина без лактозы",
     "• корзина на неделю при диабете",
   ].join("\n");
+}
+
+function buildBasketClarificationQuestion(reason: string): string {
+  if (/базов|категор|однотипн/i.test(reason)) {
+    return "Уточните основу корзины: крупы, курица, овощи, молочные продукты, перекус или что-то ещё?";
+  }
+
+  return "Уточните, пожалуйста, тип корзины: бюджетная, полезная, без лактозы, при диабете, на 3 дня или на неделю.";
 }
 
 function buildCheapestReply(
@@ -2711,15 +3152,21 @@ function buildFallbackPlan(intent: SearchIntent): BotRequestPlan {
           : "search",
     catalogQueries: fallbackQueries,
     budgetMinor: intent.budgetMinor,
-      needsHealthy: intent.wantsHealthy,
-      needsDiagnosisAdvice: intent.wantsDiagnosisAdvice,
-      compareCheapest: intent.wantsCheap,
-      wantsBasket: intent.wantsBasket,
-      profileOnly: false,
-      responseMode:
-        intent.wantsBasket || intent.wantsHealthy || intent.wantsDiagnosisAdvice ? "assistant" : "direct",
-      profilePatch: undefined,
-    };
+    needsHealthy: intent.wantsHealthy,
+    needsDiagnosisAdvice: intent.wantsDiagnosisAdvice,
+    compareCheapest: intent.wantsCheap,
+    wantsBasket: intent.wantsBasket,
+    profileOnly: false,
+    responseMode:
+      intent.wantsBasket || intent.wantsHealthy || intent.wantsDiagnosisAdvice ? "assistant" : "direct",
+    planningConfidence: intent.searchTerms.length > 0 || intent.wantsBasket || intent.wantsDiagnosisAdvice ? "medium" : "low",
+    needsClarification: intent.searchTerms.length === 0 && !intent.wantsBasket && !intent.wantsDiagnosisAdvice,
+    clarificationQuestion:
+      intent.searchTerms.length === 0 && !intent.wantsBasket && !intent.wantsDiagnosisAdvice
+        ? "Уточните, пожалуйста, что вы хотите: найти товар, сравнить цены или собрать корзину?"
+        : null,
+    profilePatch: undefined,
+  };
 }
 
 function normalizeProfilePatch(
@@ -2844,6 +3291,7 @@ function mergeProfilePatch(
     allergies: [...new Set([...(previous?.allergies ?? []), ...(patch.allergies ?? [])])],
     diagnoses: [...new Set([...(previous?.diagnoses ?? []), ...(patch.diagnoses ?? [])])],
     healthGoals: [...new Set([...(previous?.healthGoals ?? []), ...(patch.healthGoals ?? [])])],
+    sessionContext: previous?.sessionContext ?? emptySessionContext(),
   };
 }
 
@@ -2901,6 +3349,20 @@ function reconcilePlanWithIntent(plan: BotRequestPlan, intent: SearchIntent): Bo
       wantsBasket || needsHealthy || needsDiagnosisAdvice || compareCheapest
         ? "assistant"
         : plan.responseMode,
+    planningConfidence:
+      plan.planningConfidence === "high"
+        ? "high"
+        : catalogQueries.length > 0 || wantsBasket || needsDiagnosisAdvice || compareCheapest
+          ? "medium"
+          : "low",
+    needsClarification:
+      plan.needsClarification ||
+      (catalogQueries.length === 0 && !wantsBasket && !needsDiagnosisAdvice && !compareCheapest && !plan.profileOnly),
+    clarificationQuestion:
+      plan.clarificationQuestion ??
+      (catalogQueries.length === 0 && !wantsBasket && !needsDiagnosisAdvice && !compareCheapest && !plan.profileOnly
+        ? "Уточните, пожалуйста, продукт или задачу: найти товар, где дешевле или собрать корзину?"
+        : null),
   };
 }
 
@@ -3090,8 +3552,9 @@ async function planUserRequestWithGroq(
             content: [
               "Ты planner для Telegram-бота по продуктам.",
               "Верни только JSON без пояснений.",
-              "Формат: {\"action\":\"search|find_cheapest|build_basket|diagnosis_safe\",\"catalogQueries\":[\"...\"],\"budgetRub\":number|null,\"needsHealthy\":boolean,\"needsDiagnosisAdvice\":boolean,\"compareCheapest\":boolean,\"wantsBasket\":boolean,\"profileOnly\":boolean,\"responseMode\":\"direct|assistant\",\"profilePatch\":{\"budgetRub\":number|null,\"preferredStores\":[\"...\"],\"excludedIngredients\":[\"...\"],\"allergies\":[\"...\"],\"diagnoses\":[\"...\"],\"healthGoals\":[\"...\"]}}.",
+              "Формат: {\"action\":\"search|find_cheapest|build_basket|diagnosis_safe\",\"catalogQueries\":[\"...\"],\"budgetRub\":number|null,\"needsHealthy\":boolean,\"needsDiagnosisAdvice\":boolean,\"compareCheapest\":boolean,\"wantsBasket\":boolean,\"profileOnly\":boolean,\"responseMode\":\"direct|assistant\",\"planningConfidence\":\"low|medium|high\",\"needsClarification\":boolean,\"clarificationQuestion\":string|null,\"profilePatch\":{\"budgetRub\":number|null,\"preferredStores\":[\"...\"],\"excludedIngredients\":[\"...\"],\"allergies\":[\"...\"],\"diagnoses\":[\"...\"],\"healthGoals\":[\"...\"]}}.",
               "catalogQueries должны быть короткими и пригодными для поиска по каталогу, без лишних слов.",
+              "Если уверенность низкая или запрос слишком широкий, needsClarification=true и задай один короткий clarificationQuestion.",
               "Если пользователь просит собрать корзину, action=build_basket.",
               "Если пользователь просит корзину без явных товаров, synthesize 4-8 разумных продуктовых запросов для корзины, а не оставляй catalogQueries пустым.",
               "Если пользователь ищет где дешевле, action=find_cheapest.",
@@ -3120,6 +3583,7 @@ async function planUserRequestWithGroq(
                   preferredStores: intent.preferredStores,
                   excludedIngredients: intent.excludedIngredients,
                   healthGoals: intent.healthGoals,
+                  currentSession: profile?.sessionContext ?? emptySessionContext(),
                   storedProfile: profile,
                 },
               },
@@ -3154,6 +3618,9 @@ async function planUserRequestWithGroq(
       wantsBasket?: boolean;
       profileOnly?: boolean;
       responseMode?: "direct" | "assistant";
+      planningConfidence?: PlanningConfidence;
+      needsClarification?: boolean;
+      clarificationQuestion?: string | null;
       profilePatch?: {
         budgetRub?: number | null;
         preferredStores?: string[];
@@ -3168,32 +3635,98 @@ async function planUserRequestWithGroq(
       return null;
     }
 
-    return {
-      action: parsed.action,
-      catalogQueries: Array.isArray(parsed.catalogQueries)
-        ? parsed.catalogQueries.map((value) => normalizeQuery(String(value))).filter((value) => value.length > 0)
-        : intent.searchTerms,
-      budgetMinor:
-        typeof parsed.budgetRub === "number" && Number.isFinite(parsed.budgetRub) && parsed.budgetRub > 0
-          ? Math.round(parsed.budgetRub * 100)
-          : intent.budgetMinor,
-      needsHealthy: parsed.needsHealthy ?? intent.wantsHealthy,
-      needsDiagnosisAdvice: parsed.needsDiagnosisAdvice ?? intent.wantsDiagnosisAdvice,
-      compareCheapest:
-        parsed.compareCheapest ?? (parsed.action === "find_cheapest" ? true : intent.wantsCheap),
-      wantsBasket: parsed.wantsBasket ?? (parsed.action === "build_basket" ? true : intent.wantsBasket),
-      profileOnly: parsed.profileOnly ?? false,
-      responseMode:
-        parsed.responseMode ??
-        (parsed.action === "search" && !intent.wantsHealthy && !intent.wantsDiagnosisAdvice ? "direct" : "assistant"),
-      profilePatch: normalizeProfilePatch(parsed.profilePatch),
-    };
+    return finalizePlannerPlan(parsed, userQuery, intent);
   } catch (error) {
     console.error("Groq planner failed", error);
     return null;
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function finalizePlannerPlan(
+  parsed: {
+    action?: PlannedAction;
+    catalogQueries?: string[];
+    budgetRub?: number | null;
+    needsHealthy?: boolean;
+    needsDiagnosisAdvice?: boolean;
+    compareCheapest?: boolean;
+    wantsBasket?: boolean;
+    profileOnly?: boolean;
+    responseMode?: "direct" | "assistant";
+    planningConfidence?: PlanningConfidence;
+    needsClarification?: boolean;
+    clarificationQuestion?: string | null;
+    profilePatch?: {
+      budgetRub?: number | null;
+      preferredStores?: string[];
+      excludedIngredients?: string[];
+      allergies?: string[];
+      diagnoses?: string[];
+      healthGoals?: string[];
+    };
+  },
+  userQuery: string,
+  intent: SearchIntent,
+): BotRequestPlan {
+  const normalizedQueries = Array.isArray(parsed.catalogQueries)
+    ? parsed.catalogQueries
+      .map((value) => normalizeQuery(String(value)))
+      .filter((value) => value.length > 0)
+      .filter((value) => buildSearchIntent(value).searchTerms.length > 0)
+      .slice(0, 8)
+    : [];
+  const wantsBasket = parsed.wantsBasket ?? (parsed.action === "build_basket" ? true : intent.wantsBasket);
+  const compareCheapest = parsed.compareCheapest ?? (parsed.action === "find_cheapest" ? true : intent.wantsCheap);
+  const needsDiagnosisAdvice = parsed.needsDiagnosisAdvice ?? intent.wantsDiagnosisAdvice;
+  const confidence = parsed.planningConfidence ?? (normalizedQueries.length > 0 || wantsBasket ? "medium" : "low");
+  const clarificationQuestion = normalizeClarificationQuestion(parsed.clarificationQuestion, parsed.action, intent, userQuery);
+  const needsClarification = parsed.needsClarification === true ||
+    (confidence === "low" && normalizedQueries.length === 0 && !wantsBasket && !compareCheapest && !needsDiagnosisAdvice);
+
+  return {
+    action: parsed.action ?? "search",
+    catalogQueries: normalizedQueries.length > 0 ? normalizedQueries : intent.searchTerms,
+    budgetMinor:
+      typeof parsed.budgetRub === "number" && Number.isFinite(parsed.budgetRub) && parsed.budgetRub > 0
+        ? Math.round(parsed.budgetRub * 100)
+        : intent.budgetMinor,
+    needsHealthy: parsed.needsHealthy ?? intent.wantsHealthy,
+    needsDiagnosisAdvice,
+    compareCheapest,
+    wantsBasket,
+    profileOnly: parsed.profileOnly ?? false,
+    responseMode:
+      parsed.responseMode ??
+      (parsed.action === "search" && !intent.wantsHealthy && !intent.wantsDiagnosisAdvice ? "direct" : "assistant"),
+    planningConfidence: confidence,
+    needsClarification,
+    clarificationQuestion: needsClarification ? clarificationQuestion : null,
+    profilePatch: normalizeProfilePatch(parsed.profilePatch),
+  };
+}
+
+function normalizeClarificationQuestion(
+  value: string | null | undefined,
+  action: PlannedAction | undefined,
+  intent: SearchIntent,
+  userQuery: string,
+): string {
+  const normalizedValue = typeof value === "string" ? value.trim() : "";
+  if (normalizedValue.length > 0) {
+    return normalizedValue;
+  }
+
+  if (action === "find_cheapest" || intent.wantsCheap) {
+    return buildCheapestClarificationQuestion(intent.searchTerms);
+  }
+
+  if (action === "build_basket" || intent.wantsBasket) {
+    return buildBasketClarificationQuestion("Не хватает базовых категорий для уверенной корзины.");
+  }
+
+  return buildSearchClarificationQuestion(userQuery);
 }
 
 async function rewriteCatalogQueryWithGroq(

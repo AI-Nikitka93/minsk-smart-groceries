@@ -16,6 +16,6 @@ Status legend: `TODO | IN_PROGRESS | DONE | BLOCKED | CANCELLED`
 14. `TODO` Harden the new tool-contract layer for agentic actions (`save_user_profile`, `search_products`, `find_cheapest_offer`, `build_budget_basket`, `analyze_composition`) with stronger validation, cleaner tool payloads, and live-proof of response quality.
 15. `IN_PROGRESS` Improve read-model coverage for staple commodity terms (`масло`, `молоко`, `гречка`, `торт`, `хлеб`, `яйца`).
 16. `IN_PROGRESS` Translate the world-class market roadmap into delivery: basket engine v2, category read-models, health/composition scoring, household memory, standing intents, and an explicit AI intelligence track.
-17. `TODO` Convert `docs/AI_INTELLIGENCE_MAP_2026.md` into engineering work: planner contract v2, tool/result validators, session memory, evaluator/critic layer, and proactive grocery routines.
+17. `IN_PROGRESS` Convert `docs/AI_INTELLIGENCE_MAP_2026.md` into engineering work: planner contract v2, tool/result validators, session memory, evaluator/critic layer, and proactive grocery routines.
 11. `DONE` Publish the codebase as a public GitHub repository with Apache-2.0 license and bilingual README files.
 12. `DONE` Add deploy scaffolding for Cloudflare bot-worker and GitHub Actions parser-worker execution.

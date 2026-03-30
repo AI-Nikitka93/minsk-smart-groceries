@@ -114,3 +114,8 @@
 - Decision: Add a dedicated AI architecture track to the project through `docs/AI_INTELLIGENCE_MAP_2026.md`, covering planner contracts, grounded tools, read-model intelligence, memory layers, health reasoning, evaluator/critic, and proactive grocery routines.
 - Why: User feedback and live audits showed that market positioning alone was not enough; without an explicit smart-bot architecture, the project kept patching symptoms in ranking and baskets instead of building a genuinely intelligent grocery copilot.
 - Impact: Future work should prioritize planner/result contracts, session + household memory, nutrition intelligence, and evaluator layers before more cosmetic answer polish.
+
+## 2026-03-30 - AI implementation starts with contract validation and lightweight session memory
+- Decision: The first engineering slice of the new AI track is planner contract v2 plus tool argument/result validation and lightweight session memory stored in `user_profile.notification_settings.sessionContext`.
+- Why: The current bot was too trusting of model outputs and too stateless between turns, which made follow-ups feel fake-smart even when the transport and tool loop technically worked.
+- Impact: Future answers can preserve short conversational context, clarification requests become first-class state, and the next improvement should be an evaluator/critic layer instead of more ad-hoc heuristics.

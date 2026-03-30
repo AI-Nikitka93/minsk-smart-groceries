@@ -279,3 +279,10 @@
 Изменены файлы: docs/AI_INTELLIGENCE_MAP_2026.md, docs/RESEARCH_LOG.md, docs/STATE.md, docs/state.json, docs/EXEC_PLAN.md, docs/DECISIONS.md, docs/PROJECT_MAP.md, docs/PROJECT_HISTORY.md
 Результат/доказательство: свежие официальные и первичные источники по OpenAI Agentic Commerce, OpenAI memory/evals guidance, Groq tool use, OpenRouter structured outputs, Instacart, Walmart, Samsung Food и Yuka; артефакт `docs/AI_INTELLIGENCE_MAP_2026.md`
 Следующий шаг: Перевести AI intelligence map в инженерный backlog: planner contract v2, tool/result validators, session memory и evaluator layer.
+
+Дата и время: 2026-03-30 17:27
+Роль: P-BOT Universal Bot Architect
+Сделано: Реализован первый инженерный checkpoint из AI intelligence map: `bot-worker` получил planner contract v2, validation для tool arguments/results, clarification-aware state и лёгкую session memory в `user_profile.notification_settings.sessionContext`; updated session теперь передаётся в planner и agentic tool-loop.
+Изменены файлы: src/apps/bot-worker/index.ts, docs/STATE.md, docs/state.json, docs/EXEC_PLAN.md, docs/DECISIONS.md, docs/PROJECT_HISTORY.md
+Результат/доказательство: `npm run typecheck` -> success; `rg -n "TODO|placeholder|insert code" "src/apps/bot-worker/index.ts"` -> только реальные `input_field_placeholder`; `npx wrangler deploy --config "wrangler.toml"` -> version `8e155b46-87cd-4755-b0f4-1156b213a86b`; `GET /health` -> `ok: true`; synthetic webhook smoke-tests (`у меня диабет и бюджет 30 рублей`, `где дешевле купить масло`, `собери корзину на 3 дня`) -> `hookStatus 200`, `delta=2`
+Следующий шаг: Добавить evaluator/critic слой и использовать новый session context для follow-up handling, чтобы бот лучше понимал уточнения и слабые tool outcomes.

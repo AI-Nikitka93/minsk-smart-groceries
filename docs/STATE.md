@@ -1,14 +1,14 @@
 # Current State
 
 - Goal: Move from approved architecture to a genuinely intelligent Telegram grocery copilot for Smart Grocery Assistant.
-- Current task: AI implementation research is now formalized into an explicit project track: `docs/AI_INTELLIGENCE_MAP_2026.md` defines the missing smart-bot layers (`planner`, `grounded tools`, `read-model intelligence`, `memory`, `health reasoning`, `evaluator`, `proactive routines`) that must sit above the current bot-worker.
+- Current task: First AI implementation checkpoint is now live in `bot-worker`: planner contract v2, tool argument/result validation, clarification-aware session state, and lightweight session memory in `user_profile.notification_settings.sessionContext` are deployed to Cloudflare Workers.
 - Status: IN_PROGRESS
-- Active step: `docs/EXEC_PLAN.md` step 16
-- Next step: Convert the new AI intelligence map into implementation work: start with planner contract hardening, tool/result validation, and session memory so the bot moves from transport-ready replies to genuinely intelligent orchestration.
+- Active step: `docs/EXEC_PLAN.md` step 17
+- Next step: Continue the AI track with evaluator/critic logic and use the new session context to improve follow-up handling, clarification quality, and rejection of weak tool outcomes before final synthesis.
 - Blockers:
   - Live user retests still show that the bot can transport a reply but not yet consistently solve the shopping task at a world-class level.
   - Parsed catalog coverage and category semantics remain too weak for several staple commodity terms (`масло`, `молоко`, `торт`, `гречка`, `яйца`, `хлеб`), which limits both basket quality and AI planning.
-  - The roadmap previously lacked an explicit AI architecture track; without it, the project kept treating symptoms in ranking and baskets instead of building a real grocery copilot brain.
+  - Session memory now exists only in lightweight short-form state; there is still no evaluator/critic layer and no deeper household routine memory, so follow-ups can improve but are not yet world-class.
 - Artifacts:
   - `.env.operator.local` (local ignored secret intake file)
   - `docs/AI_INTELLIGENCE_MAP_2026.md`
