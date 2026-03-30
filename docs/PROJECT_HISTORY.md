@@ -293,3 +293,10 @@
 Изменены файлы: src/apps/bot-worker/index.ts, docs/STATE.md, docs/state.json, docs/DECISIONS.md, docs/PROJECT_HISTORY.md
 Результат/доказательство: `npm run typecheck` -> success; `rg -n "TODO|placeholder|insert code" "src/apps/bot-worker/index.ts"` -> только реальные `input_field_placeholder`; `npx wrangler deploy --config "wrangler.toml"` -> version `303d2522-6d49-47ee-b80c-7da5792c8051`; synthetic webhook smoke-tests (`у меня диабет и бюджет 30 рублей`, `где дешевле купить масло`, `собери корзину на 3 дня`) -> `hookStatus 200`, `delta=2`
 Следующий шаг: Углубить память и follow-up handling: использовать session context в planner/tool selection и добавить richer household memory вместо чисто краткой session state.
+
+Дата и время: 2026-03-30 17:53
+Роль: P-BOT Universal Bot Architect
+Сделано: Реализован третий инженерный checkpoint из AI intelligence map: household/session memory теперь сохраняет `householdSize`, profile-only сообщения жёстко short-circuit'ятся в `save_profile`, а direct follow-up router удерживает фразы вроде `а подешевле` на последнем grounded товаре вместо ложного переопределения intent.
+Изменены файлы: src/apps/bot-worker/index.ts, docs/STATE.md, docs/state.json, docs/EXEC_PLAN.md, docs/DECISIONS.md, docs/PROJECT_HISTORY.md
+Результат/доказательство: `npm run typecheck` -> success; `rg -n "TODO|placeholder|insert code" "src/apps/bot-worker/index.ts"` -> только реальные `input_field_placeholder`; `npx wrangler deploy --config "wrangler.toml"` -> versions `b1089664-3b0b-41af-9ec6-550472a81bc8`, `be0f18ad-18f0-4623-b0e8-32a5332519bf`, `7d7044f6-1d18-4c32-9867-fe543a9bbab1`; `GET /health` -> `ok: true`; live profile proof via Turso -> `budget_minor=3000`, `household_size=4`, `lastAction=save_profile`, `lastCatalogQueries=[]`; live follow-up proof via Turso after `где дешевле купить молоко` -> `а подешевле` -> `lastAction=find_cheapest`, `lastCatalogQueries=[\"молоко\"]`
+Следующий шаг: Построить evaluator-backed golden-set harness для multi-turn shopping flows и затем поднять proactive household routines поверх новой session/family memory.

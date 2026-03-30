@@ -66,6 +66,7 @@ const STOP_WORDS = new Set([
   "ли",
   "мне",
   "меня",
+  "нас",
   "на",
   "надо",
   "не",
@@ -155,6 +156,23 @@ const STOP_WORDS = new Set([
   "недели",
   "месяц",
   "месяца",
+  "семья",
+  "семьи",
+  "двоих",
+  "троих",
+  "четверых",
+]);
+const FOLLOW_UP_MODIFIER_TERMS = new Set([
+  "подешевле",
+  "дешевле",
+  "подороже",
+  "дороже",
+  "полезнее",
+  "полезней",
+  "ещё",
+  "еще",
+  "варианты",
+  "ссылки",
 ]);
 const LOW_SIGNAL_BASKET_HINTS = new Set([
   "соус",
@@ -412,6 +430,8 @@ interface AssistantProductRow {
 interface SearchIntent {
   normalizedQuery: string;
   searchTerms: string[];
+  sessionQueries: string[];
+  isFollowUp: boolean;
   wantsHealthy: boolean;
   wantsCheap: boolean;
   budgetMinor: number | null;
@@ -421,6 +441,7 @@ interface SearchIntent {
   preferredStores: string[];
   excludedIngredients: string[];
   healthGoals: string[];
+  householdSize: number | null;
 }
 
 type PlannedAction = "search" | "find_cheapest" | "build_basket" | "diagnosis_safe";
@@ -428,6 +449,7 @@ type PlanningConfidence = "low" | "medium" | "high";
 
 interface UserProfilePatch {
   budgetMinor?: number | null;
+  householdSize?: number | null;
   preferredStores?: string[];
   excludedIngredients?: string[];
   allergies?: string[];
@@ -475,6 +497,7 @@ interface PersistedUserProfile {
   lastName: string | null;
   languageCode: string | null;
   budgetMinor: number | null;
+  householdSize: number | null;
   preferredStores: string[];
   excludedIngredients: string[];
   allergies: string[];
@@ -813,6 +836,27 @@ async function runAgenticAssistant(
     return null;
   }
 
+  const currentIntentHints = buildSearchIntent(userQuery, persistedProfile);
+
+  if (looksLikeStandaloneProfileUpdate(userQuery) && !hasExplicitShoppingRequest(userQuery)) {
+    const directProfileOutcome = validateAgentToolOutcome(
+      await executeSaveUserProfileTool(db, message.from ?? null, persistedProfile, {}, userQuery),
+      userQuery,
+    );
+    const updatedProfile = directProfileOutcome.updatedProfile ?? persistedProfile;
+
+    return {
+      text: buildProfileSavedMessage(updatedProfile),
+      parseMode: undefined,
+      replyMarkup: directProfileOutcome.replyMarkup,
+      sessionPatch: directProfileOutcome.sessionPatch,
+    };
+  }
+
+  if (shouldShortCircuitFollowUp(currentIntentHints, persistedProfile)) {
+    return runDirectFollowUpAssistant(env, db, userQuery, persistedProfile, currentIntentHints);
+  }
+
   const tools = buildAgentToolSchemas();
   const messages: GroqChatMessage[] = [
     {
@@ -822,7 +866,10 @@ async function runAgenticAssistant(
         "Твоя задача: понять сообщение пользователя и СНАЧАЛА вызвать подходящий инструмент, а уже потом отвечать.",
         "Не выдумывай товары, цены, составы, скидки, ссылки, профиль пользователя или диагнозы.",
         "Учитывай currentSession: это краткая память о прошлом ходе, она помогает не терять контекст, но не отменяет проверку инструментами.",
-        "Если пользователь сообщает предпочтения, бюджет, аллергию или диагноз, используй tool save_user_profile.",
+        "Учитывай currentIntentHints: это уже разобранные сигналы о follow-up, бюджете, диагнозах и resolvedSessionQueries.",
+        "Если currentIntentHints.isFollowUp=true и explicitSearchTerms пусты, используй resolvedSessionQueries как продуктовый якорь, а не слова вроде 'подешевле' или 'ещё'.",
+        "Если пользователь сообщает предпочтения, бюджет, аллергию, диагноз или размер семьи без явного shopping-запроса, вызывай ТОЛЬКО tool save_user_profile.",
+        "Сообщения вида 'у меня диабет', 'мой бюджет 30 рублей', 'нас 4', 'на двоих', 'для семьи' без просьбы что-то найти или собрать не должны идти в поиск или анализ состава.",
         "Если пользователь спрашивает, где дешевле товар, используй tool find_cheapest_offer.",
         "Если пользователь просит обычный поиск товара или ссылки, используй tool search_products.",
         "Если пользователь просит корзину, используй tool build_budget_basket.",
@@ -841,6 +888,7 @@ async function runAgenticAssistant(
           query: userQuery,
           currentProfile: serializeProfileForModel(persistedProfile),
           currentSession: persistedProfile?.sessionContext ?? emptySessionContext(),
+          currentIntentHints: serializeIntentHintsForModel(currentIntentHints),
         },
         null,
         2,
@@ -922,6 +970,69 @@ async function runAgenticAssistant(
     : null;
 }
 
+function shouldShortCircuitFollowUp(
+  intent: SearchIntent,
+  profile: PersistedUserProfile | null,
+): boolean {
+  return Boolean(
+    profile?.sessionContext.lastAction &&
+    intent.isFollowUp &&
+    intent.searchTerms.length === 0 &&
+    intent.sessionQueries.length > 0,
+  );
+}
+
+async function runDirectFollowUpAssistant(
+  env: BotWorkerEnv,
+  db: ReturnType<typeof createDatabase>,
+  userQuery: string,
+  profile: PersistedUserProfile | null,
+  intent: SearchIntent,
+): Promise<AgenticReply | null> {
+  const fallbackQuery = intent.sessionQueries[0] ?? "";
+  let outcome: AgenticToolOutcome;
+
+  if (intent.wantsBasket) {
+    outcome = await executeBuildBasketTool(db, profile, userQuery, {
+      productQueries: intent.sessionQueries,
+      budgetRub: intent.budgetMinor !== null ? Number((intent.budgetMinor / 100).toFixed(2)) : null,
+      diagnosisAware: intent.wantsDiagnosisAdvice,
+      healthy: intent.wantsHealthy,
+    });
+  } else if (intent.wantsCheap) {
+    outcome = await executeFindCheapestTool(db, profile, {
+      productQuery: fallbackQuery,
+      limit: 5,
+    }, userQuery);
+  } else if (intent.wantsDiagnosisAdvice) {
+    outcome = await executeAnalyzeCompositionTool(db, profile, {
+      productQuery: fallbackQuery,
+      limit: 5,
+    }, userQuery);
+  } else {
+    outcome = await executeSearchProductsTool(db, profile, {
+      productQuery: fallbackQuery,
+      limit: 5,
+    }, userQuery);
+  }
+
+  const validatedOutcome = validateAgentToolOutcome(outcome, userQuery);
+  const synthesizedReply = await synthesizeAgenticReply(
+    env,
+    userQuery,
+    validatedOutcome.updatedProfile ?? profile,
+    [
+      {
+        name: validatedOutcome.name,
+        payload: stripFallbackTextForModel(validatedOutcome.payload),
+      },
+    ],
+    validatedOutcome,
+  );
+
+  return synthesizedReply ?? buildAgenticFallbackReply(validatedOutcome);
+}
+
 function buildAgentToolSchemas(): Record<string, unknown>[] {
   return [
     {
@@ -933,6 +1044,7 @@ function buildAgentToolSchemas(): Record<string, unknown>[] {
           type: "object",
           properties: {
             budgetRub: { type: ["number", "null"] },
+            householdSize: { type: ["number", "null"] },
             preferredStores: { type: "array", items: { type: "string" } },
             excludedIngredients: { type: "array", items: { type: "string" } },
             allergies: { type: "array", items: { type: "string" } },
@@ -1117,12 +1229,16 @@ function normalizeToolCallArguments(
   userQuery: string,
 ): Record<string, unknown> {
   const fallbackIntent = buildSearchIntent(userQuery, profile);
-  const fallbackQuery = fallbackIntent.searchTerms.join(" ").trim();
+  const fallbackQuery = (fallbackIntent.searchTerms.join(" ").trim() || fallbackIntent.sessionQueries.join(" ").trim());
 
   switch (toolName) {
     case "save_user_profile":
       return {
         budgetRub: typeof args.budgetRub === "number" ? args.budgetRub : null,
+        householdSize:
+          typeof args.householdSize === "number" && Number.isFinite(args.householdSize) && args.householdSize > 0
+            ? Math.min(20, Math.round(args.householdSize))
+            : null,
         preferredStores: Array.isArray(args.preferredStores) ? args.preferredStores : [],
         excludedIngredients: Array.isArray(args.excludedIngredients) ? args.excludedIngredients : [],
         allergies: Array.isArray(args.allergies) ? args.allergies : [],
@@ -1232,14 +1348,16 @@ async function executeSaveUserProfileTool(
   args: Record<string, unknown>,
   userQuery: string,
 ): Promise<AgenticToolOutcome> {
-  const patch = normalizeProfilePatch({
+  const fallbackPatch = extractFallbackProfilePatch(userQuery, buildSearchIntent(userQuery, profile));
+  const patch = mergeProfilePatches(normalizeProfilePatch({
     budgetRub: typeof args.budgetRub === "number" ? args.budgetRub : null,
+    householdSize: typeof args.householdSize === "number" ? args.householdSize : null,
     preferredStores: Array.isArray(args.preferredStores) ? (args.preferredStores as string[]) : [],
     excludedIngredients: Array.isArray(args.excludedIngredients) ? (args.excludedIngredients as string[]) : [],
     allergies: Array.isArray(args.allergies) ? (args.allergies as string[]) : [],
     diagnoses: Array.isArray(args.diagnoses) ? (args.diagnoses as string[]) : [],
     healthGoals: Array.isArray(args.healthGoals) ? (args.healthGoals as string[]) : [],
-  });
+  }), fallbackPatch);
 
   if (!telegramUser || !patch) {
     const fallbackProfile = profile ?? null;
@@ -1531,6 +1649,7 @@ function serializeProfileForModel(profile: PersistedUserProfile | null): Record<
 
   return {
     budgetRub: profile.budgetMinor !== null ? Number((profile.budgetMinor / 100).toFixed(2)) : null,
+    householdSize: profile.householdSize,
     preferredStores: profile.preferredStores,
     excludedIngredients: profile.excludedIngredients,
     allergies: profile.allergies,
@@ -1543,6 +1662,22 @@ function serializeProfileForModel(profile: PersistedUserProfile | null): Record<
       lastClarificationQuestion: profile.sessionContext.lastClarificationQuestion,
       lastOutcomeStatus: profile.sessionContext.lastOutcomeStatus,
     },
+  };
+}
+
+function serializeIntentHintsForModel(intent: SearchIntent): Record<string, unknown> {
+  return {
+    explicitSearchTerms: intent.searchTerms,
+    resolvedSessionQueries: intent.sessionQueries,
+    isFollowUp: intent.isFollowUp,
+    wantsHealthy: intent.wantsHealthy,
+    wantsCheap: intent.wantsCheap,
+    wantsBasket: intent.wantsBasket,
+    wantsDiagnosisAdvice: intent.wantsDiagnosisAdvice,
+    budgetRub: intent.budgetMinor !== null ? Number((intent.budgetMinor / 100).toFixed(2)) : null,
+    householdSize: intent.householdSize,
+    diagnosisLabels: intent.diagnosisContext.labels,
+    excludedIngredients: intent.excludedIngredients,
   };
 }
 
@@ -1881,6 +2016,7 @@ async function getPersistedUserProfile(
     lastName: row.lastName ?? null,
     languageCode: row.languageCode ?? null,
     budgetMinor: row.budgetMinor ?? null,
+    householdSize: row.householdSize ?? null,
     preferredStores: asStringArray(row.preferredStores),
     excludedIngredients: asStringArray(row.excludedIngredients),
     allergies: asStringArray(row.allergies),
@@ -1965,6 +2101,7 @@ async function upsertPersistedUserProfile(
       languageCode: merged.languageCode,
       timezone: "Europe/Minsk",
       budgetMinor: merged.budgetMinor,
+      householdSize: merged.householdSize,
       preferredStores: merged.preferredStores,
       excludedIngredients: merged.excludedIngredients,
       allergies: merged.allergies,
@@ -1985,6 +2122,7 @@ async function upsertPersistedUserProfile(
         lastName: merged.lastName,
         languageCode: merged.languageCode,
         budgetMinor: merged.budgetMinor,
+        householdSize: merged.householdSize,
         preferredStores: merged.preferredStores,
         excludedIngredients: merged.excludedIngredients,
         allergies: merged.allergies,
@@ -2011,6 +2149,7 @@ async function saveSessionContext(
     lastName: null,
     languageCode: telegramUser.language_code ?? null,
     budgetMinor: null,
+    householdSize: null,
     preferredStores: [],
     excludedIngredients: [],
     allergies: [],
@@ -2036,6 +2175,7 @@ async function saveSessionContext(
       languageCode: nextProfile.languageCode,
       timezone: "Europe/Minsk",
       budgetMinor: nextProfile.budgetMinor,
+      householdSize: nextProfile.householdSize,
       preferredStores: nextProfile.preferredStores,
       excludedIngredients: nextProfile.excludedIngredients,
       allergies: nextProfile.allergies,
@@ -2056,6 +2196,7 @@ async function saveSessionContext(
         lastName: nextProfile.lastName,
         languageCode: nextProfile.languageCode,
         budgetMinor: nextProfile.budgetMinor,
+        householdSize: nextProfile.householdSize,
         preferredStores: nextProfile.preferredStores,
         excludedIngredients: nextProfile.excludedIngredients,
         allergies: nextProfile.allergies,
@@ -2653,6 +2794,11 @@ function buildSearchIntent(query: string, profile?: PersistedUserProfile | null)
         "гипертония",
       ].includes(part),
   );
+  const sessionQueries = resolveSessionQueries(normalizedQuery, searchTerms, profile);
+  const isFollowUp = sessionQueries.length > 0;
+  const effectiveSearchTerms = isFollowUp
+    ? searchTerms.filter((term) => !FOLLOW_UP_MODIFIER_TERMS.has(term))
+    : searchTerms;
 
   const queryDiagnosisContext = extractDiagnosisContext(normalizedQuery);
   const profileDiagnosisContext = profile ? extractDiagnosisContext(profile.diagnoses.join(" ")) : emptyDiagnosisContext();
@@ -2667,20 +2813,71 @@ function buildSearchIntent(query: string, profile?: PersistedUserProfile | null)
 
   return {
     normalizedQuery,
-    searchTerms: [...new Set(searchTerms)],
-    wantsHealthy: /(здоров|полез|натурал|без\s+сахар|состав|безопас)/.test(normalizedQuery),
-    wantsCheap: /(дешев|выгод|эконом|акци|скид)/.test(normalizedQuery),
+    searchTerms: [...new Set(effectiveSearchTerms)],
+    sessionQueries,
+    isFollowUp,
+    wantsHealthy:
+      /(здоров|полез|натурал|без\s+сахар|состав|безопас|без\s+лактоз|без\s+глютен)/.test(normalizedQuery) ||
+      (isFollowUp && profile?.sessionContext.lastAction === "diagnosis_safe"),
+    wantsCheap:
+      /(дешев|выгод|эконом|акци|скид)/.test(normalizedQuery) ||
+      (isFollowUp && /подешев|дешевле|дешев/iu.test(normalizedQuery)) ||
+      (isFollowUp && profile?.sessionContext.lastAction === "find_cheapest"),
     budgetMinor: extractBudgetMinor(normalizedQuery) ?? profile?.budgetMinor ?? null,
-    wantsBasket: /(корзин|на\s+\d+(?:[.,]\d+)?\s*(?:руб|рубля|рублей|byn|р)\b|на\s+недел|на\s+день|меню)/.test(
-      normalizedQuery,
-    ),
+    wantsBasket:
+      /(корзин|на\s+\d+(?:[.,]\d+)?\s*(?:руб|рубля|рублей|byn|р)\b|на\s+недел|на\s+день|меню)/.test(
+        normalizedQuery,
+      ) ||
+      (isFollowUp && profile?.sessionContext.lastAction === "build_basket"),
     wantsDiagnosisAdvice:
-      diagnosisContext.keys.length > 0 || /(диагноз|можно\s+ли|что\s+можно|что\s+нельзя)/.test(normalizedQuery),
+      queryDiagnosisContext.keys.length > 0 ||
+      /(диагноз|можно\s+ли|что\s+можно|что\s+нельзя|без\s+лактоз|без\s+глютен)/.test(normalizedQuery) ||
+      (isFollowUp && profile?.sessionContext.lastAction === "diagnosis_safe"),
     diagnosisContext,
     preferredStores: profile?.preferredStores ?? [],
     excludedIngredients,
     healthGoals: profile?.healthGoals ?? [],
+    householdSize: extractHouseholdSize(normalizedQuery) ?? profile?.householdSize ?? null,
   };
+}
+
+function resolveSessionQueries(
+  normalizedQuery: string,
+  searchTerms: string[],
+  profile?: PersistedUserProfile | null,
+): string[] {
+  if (looksLikeStandaloneProfileUpdate(normalizedQuery) && !hasExplicitShoppingRequest(normalizedQuery)) {
+    return [];
+  }
+
+  const priorQueries = profile?.sessionContext.lastCatalogQueries ?? [];
+  if (priorQueries.length === 0) {
+    return [];
+  }
+
+  if (looksLikeFollowUpQuery(normalizedQuery, searchTerms, profile?.sessionContext ?? emptySessionContext())) {
+    return priorQueries;
+  }
+
+  return [];
+}
+
+function looksLikeFollowUpQuery(
+  normalizedQuery: string,
+  searchTerms: string[],
+  sessionContext: SessionContext,
+): boolean {
+  if ((sessionContext.lastCatalogQueries?.length ?? 0) === 0) {
+    return false;
+  }
+
+  if (searchTerms.length === 0) {
+    return true;
+  }
+
+  return /(а\s+подешев|подешевле|подороже|а\s+полезн|полезнее|ссылки|ещ[её]|еще|варианты|из этого|из них|для семьи|на двоих|на троих|на неделю|на 3 дня|на три дня|без\s+лактоз|без\s+глютен)/.test(
+    normalizedQuery,
+  );
 }
 
 function extractBudgetMinor(query: string): number | null {
@@ -2695,6 +2892,30 @@ function extractBudgetMinor(query: string): number | null {
   }
 
   return Math.round(amount * 100);
+}
+
+function extractHouseholdSize(query: string): number | null {
+  const explicitMatch =
+    query.match(/(?:семья|нас|для семьи)\s*(?:из)?\s*(\d{1,2})/u) ??
+    query.match(/на\s+(\d{1,2})\s*(?:чел|человек|персон)/u);
+  if (explicitMatch) {
+    const value = Number(explicitMatch[1]);
+    if (Number.isFinite(value) && value > 0 && value <= 20) {
+      return value;
+    }
+  }
+
+  if (/\bна двоих\b/u.test(query)) {
+    return 2;
+  }
+  if (/\bна троих\b/u.test(query)) {
+    return 3;
+  }
+  if (/\bна четверых\b/u.test(query)) {
+    return 4;
+  }
+
+  return null;
 }
 
 async function buildAssistantReply(
@@ -3270,7 +3491,13 @@ function mergeDiagnosisContexts(left: DiagnosisContext, right: DiagnosisContext)
 
 function buildFallbackPlan(intent: SearchIntent): BotRequestPlan {
   const fallbackQueries =
-    intent.searchTerms.length > 0 ? intent.searchTerms : intent.wantsBasket ? buildFallbackBasketQueries(intent) : [];
+    intent.searchTerms.length > 0
+      ? [...intent.sessionQueries, ...intent.searchTerms]
+      : intent.sessionQueries.length > 0
+        ? intent.sessionQueries
+        : intent.wantsBasket
+          ? buildFallbackBasketQueries(intent)
+          : [];
 
   return {
     action: intent.wantsBasket
@@ -3303,6 +3530,7 @@ function normalizeProfilePatch(
   patch:
     | {
         budgetRub?: number | null;
+        householdSize?: number | null;
         preferredStores?: string[];
         excludedIngredients?: string[];
         allergies?: string[];
@@ -3319,6 +3547,14 @@ function normalizeProfilePatch(
 
   if (typeof patch.budgetRub === "number" && Number.isFinite(patch.budgetRub) && patch.budgetRub > 0) {
     normalized.budgetMinor = Math.round(patch.budgetRub * 100);
+  }
+
+  if (
+    typeof patch.householdSize === "number" &&
+    Number.isFinite(patch.householdSize) &&
+    patch.householdSize > 0
+  ) {
+    normalized.householdSize = Math.min(20, Math.round(patch.householdSize));
   }
 
   if (Array.isArray(patch.preferredStores)) {
@@ -3349,6 +3585,10 @@ function extractFallbackProfilePatch(query: string, intent: SearchIntent): UserP
 
   if (intent.budgetMinor !== null) {
     patch.budgetMinor = intent.budgetMinor;
+  }
+
+  if (intent.householdSize !== null) {
+    patch.householdSize = intent.householdSize;
   }
 
   if (intent.diagnosisContext.labels.length > 0) {
@@ -3392,6 +3632,7 @@ function mergeProfilePatches(
 
   return {
     budgetMinor: right?.budgetMinor ?? left?.budgetMinor,
+    householdSize: right?.householdSize ?? left?.householdSize,
     preferredStores: [...new Set([...(left?.preferredStores ?? []), ...(right?.preferredStores ?? [])])],
     excludedIngredients: [...new Set([...(left?.excludedIngredients ?? []), ...(right?.excludedIngredients ?? [])])],
     allergies: [...new Set([...(left?.allergies ?? []), ...(right?.allergies ?? [])])],
@@ -3416,6 +3657,7 @@ function mergeProfilePatch(
     lastName: previous?.lastName ?? null,
     languageCode: telegramUser.language_code ?? previous?.languageCode ?? null,
     budgetMinor: patch.budgetMinor ?? previous?.budgetMinor ?? null,
+    householdSize: patch.householdSize ?? previous?.householdSize ?? null,
     preferredStores: [...new Set([...(previous?.preferredStores ?? []), ...(patch.preferredStores ?? [])])],
     excludedIngredients: [...new Set([...(previous?.excludedIngredients ?? []), ...(patch.excludedIngredients ?? [])])],
     allergies: [...new Set([...(previous?.allergies ?? []), ...(patch.allergies ?? [])])],
@@ -3461,7 +3703,7 @@ function reconcilePlanWithIntent(plan: BotRequestPlan, intent: SearchIntent): Bo
     action = "diagnosis_safe";
   }
 
-  const catalogQueries = [...new Set([...plan.catalogQueries, ...intent.searchTerms])]
+  const catalogQueries = [...new Set([...plan.catalogQueries, ...intent.sessionQueries, ...intent.searchTerms])]
     .map((value) => normalizeQuery(value))
     .filter((value) => buildSearchIntent(value).searchTerms.length > 0);
 
@@ -3506,7 +3748,7 @@ function isProfileUpdateOnlyQuery(
     !plan.wantsBasket &&
     !plan.compareCheapest &&
     (plan.profileOnly || looksLikeStandaloneProfileUpdate(text)) &&
-    !/(найд|покаж|где|дешев|корзин|купит|ссылк|подбер|собер|что\s+можно|можно\s+ли)/iu.test(text)
+    !hasExplicitShoppingRequest(text)
   );
 }
 
@@ -3517,12 +3759,23 @@ function looksLikeStandaloneProfileUpdate(text: string): boolean {
     /\bмой бюджет\b/u.test(normalized) ||
     /\bмне нельзя\b/u.test(normalized) ||
     /\bаллерг/u.test(normalized) ||
+    /\bнас\s+\d{1,2}\b/u.test(normalized) ||
+    /\bсемь[яи]\b/u.test(normalized) ||
+    /\bдля семьи\b/u.test(normalized) ||
+    /\bна двоих\b/u.test(normalized) ||
+    /\bна троих\b/u.test(normalized) ||
+    /\bна четверых\b/u.test(normalized) ||
     /\bбез лактоз/u.test(normalized) ||
     /\bбез глютен/u.test(normalized) ||
     /\bне переношу\b/u.test(normalized) ||
     /\bисключи\b/u.test(normalized) ||
     /\bучти\b/u.test(normalized)
   );
+}
+
+function hasExplicitShoppingRequest(text: string): boolean {
+  return /(найд|покаж|где|дешев|корзин|купит|ссылк|подбер|собер|что\s+можно|можно\s+ли|сравн|подбери|подобр|выбери)/iu
+    .test(text);
 }
 
 function scoreMedicalSuitability(row: AssistantProductRow, intent: SearchIntent): number {
@@ -3609,6 +3862,7 @@ function buildProfileSavedMessage(profile: PersistedUserProfile | null): string 
   const parts = [
     "Запомнил ваш профиль.",
     profile.budgetMinor !== null ? `Бюджет: ${formatMinorUnits(profile.budgetMinor)}` : null,
+    profile.householdSize !== null ? `Размер семьи: ${profile.householdSize}` : null,
     profile.diagnoses.length > 0 ? `Ограничения/диагнозы: ${profile.diagnoses.join(", ")}` : null,
     profile.allergies.length > 0 ? `Аллергии: ${profile.allergies.join(", ")}` : null,
     profile.excludedIngredients.length > 0
@@ -3682,7 +3936,7 @@ async function planUserRequestWithGroq(
             content: [
               "Ты planner для Telegram-бота по продуктам.",
               "Верни только JSON без пояснений.",
-              "Формат: {\"action\":\"search|find_cheapest|build_basket|diagnosis_safe\",\"catalogQueries\":[\"...\"],\"budgetRub\":number|null,\"needsHealthy\":boolean,\"needsDiagnosisAdvice\":boolean,\"compareCheapest\":boolean,\"wantsBasket\":boolean,\"profileOnly\":boolean,\"responseMode\":\"direct|assistant\",\"planningConfidence\":\"low|medium|high\",\"needsClarification\":boolean,\"clarificationQuestion\":string|null,\"profilePatch\":{\"budgetRub\":number|null,\"preferredStores\":[\"...\"],\"excludedIngredients\":[\"...\"],\"allergies\":[\"...\"],\"diagnoses\":[\"...\"],\"healthGoals\":[\"...\"]}}.",
+              "Формат: {\"action\":\"search|find_cheapest|build_basket|diagnosis_safe\",\"catalogQueries\":[\"...\"],\"budgetRub\":number|null,\"needsHealthy\":boolean,\"needsDiagnosisAdvice\":boolean,\"compareCheapest\":boolean,\"wantsBasket\":boolean,\"profileOnly\":boolean,\"responseMode\":\"direct|assistant\",\"planningConfidence\":\"low|medium|high\",\"needsClarification\":boolean,\"clarificationQuestion\":string|null,\"profilePatch\":{\"budgetRub\":number|null,\"householdSize\":number|null,\"preferredStores\":[\"...\"],\"excludedIngredients\":[\"...\"],\"allergies\":[\"...\"],\"diagnoses\":[\"...\"],\"healthGoals\":[\"...\"]}}.",
               "catalogQueries должны быть короткими и пригодными для поиска по каталогу, без лишних слов.",
               "Если уверенность низкая или запрос слишком широкий, needsClarification=true и задай один короткий clarificationQuestion.",
               "Если пользователь просит собрать корзину, action=build_basket.",
@@ -3704,9 +3958,12 @@ async function planUserRequestWithGroq(
                 query: userQuery,
                 extractedIntent: {
                   searchTerms: intent.searchTerms,
+                  sessionQueries: intent.sessionQueries,
+                  isFollowUp: intent.isFollowUp,
                   wantsHealthy: intent.wantsHealthy,
                   wantsCheap: intent.wantsCheap,
                   budgetRub: intent.budgetMinor !== null ? Number((intent.budgetMinor / 100).toFixed(2)) : null,
+                  householdSize: intent.householdSize,
                   wantsBasket: intent.wantsBasket,
                   wantsDiagnosisAdvice: intent.wantsDiagnosisAdvice,
                   diagnosisLabels: intent.diagnosisContext.labels,
@@ -3758,6 +4015,7 @@ async function planUserRequestWithGroq(
         allergies?: string[];
         diagnoses?: string[];
         healthGoals?: string[];
+        householdSize?: number | null;
       };
     }>(content);
 
@@ -3833,9 +4091,9 @@ function finalizePlannerPlan(
     planningConfidence: confidence,
     needsClarification,
     clarificationQuestion: needsClarification ? clarificationQuestion : null,
-    profilePatch: normalizeProfilePatch(parsed.profilePatch),
-  };
-}
+      profilePatch: normalizeProfilePatch(parsed.profilePatch),
+    };
+  }
 
 function normalizeClarificationQuestion(
   value: string | null | undefined,

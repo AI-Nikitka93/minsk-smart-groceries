@@ -124,3 +124,8 @@
 - Decision: Add a deterministic evaluator/critic before final Groq synthesis so tool outcomes are checked for weak grounding, missing exact matches, weak baskets, and clarification-required states before any “smart” natural-language answer is generated.
 - Why: Without a critic, the bot could still produce polished text over weak tool outcomes, which recreates the same fake-smart failure mode under a more advanced architecture.
 - Impact: Clarification/refusal is now a first-class gated outcome, Groq synthesis receives critic notes and trust score, and the next AI step should focus on deeper memory/evals rather than bypassing this gate.
+
+## 2026-03-30 - Stored health profile must bias ranking, not overwrite user intent
+- Decision: Keep diagnoses and family context in persistent memory for ranking and follow-up resolution, but do not let saved profile state auto-convert every future message into `diagnosis_safe`; follow-up modifiers like `а подешевле` must stay anchored to the last grounded product query.
+- Why: Live verification showed that persistent health context is useful, but if it rewrites the user's current intent, the bot stops feeling intelligent and starts answering the wrong task confidently.
+- Impact: `bot-worker` now short-circuits profile-only updates into `save_profile`, strips follow-up modifier terms from explicit product search, and uses a direct follow-up router before the LLM loop when the session already contains a grounded product anchor.
