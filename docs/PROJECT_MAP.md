@@ -1,7 +1,7 @@
 # Project Map
 
 ## Goal
-Smart Grocery Assistant for Minsk: Telegram bot plus Telegram channel that tracks grocery prices, builds baskets under budget, evaluates product composition, and publishes major discounts.
+Smart Grocery Assistant for Minsk: Telegram bot plus Telegram channel that tracks grocery prices, builds baskets under budget, evaluates product composition, and publishes major discounts, with an explicit new product direction toward a world-class Telegram-first grocery copilot.
 
 ## Primary Modules
 - `bot-worker`: Telegram webhook runtime and conversational flows.
@@ -26,6 +26,7 @@ Smart Grocery Assistant for Minsk: Telegram bot plus Telegram channel that track
 - `search-read-model`: search, filter, pagination, and cache-friendly read paths.
 - `advisory-engine`: basket optimization and composition analysis.
 - `ops-observability`: logs, health checks, exports, and admin controls.
+- `docs/WORLD_CLASS_ROADMAP_2026.md`: strategic benchmark and improvement map against global product leaders.
 
 ## External Dependencies
 - Grocery sites: `green-dostavka.by`, `edostavka.by`, `gippo-market.by`, `emall.by`
@@ -47,6 +48,7 @@ Smart Grocery Assistant for Minsk: Telegram bot plus Telegram channel that track
 - Telegram runtime is webhook-only and edge-compatible: native `fetch` to Bot API, no Node-only bot SDK.
 - Parsing should avoid heavyweight browser automation by default.
 - Architecture must respect Cloudflare free-tier limits, especially HTTP worker constraints, while moving parser scheduling to GitHub Actions cron.
+- Product strategy now targets a differentiated global-quality niche: `agentic grocery copilot` rather than a narrow price-lookup bot.
 
 ## Main Risks
 - Free-tier service suspensions or sleep policies.

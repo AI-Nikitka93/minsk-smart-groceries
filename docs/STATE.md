@@ -1,16 +1,17 @@
 # Current State
 
 - Goal: Move from approved architecture to deployable parser and Telegram bot workers for Smart Grocery Assistant.
-- Current task: `bot-worker` now strips deterministic `fallbackText` out of tool results before they reach the model and adds a dedicated Groq synthesis pass after tool execution, so final user replies come from AI over grounded tool data instead of pseudo-smart canned text.
+- Current task: A global benchmark and strategic roadmap have been added so the project can evolve from a merely working bot into a world-class Telegram-first grocery copilot with grounded baskets, health/composition reasoning, household memory, and local price intelligence.
 - Status: IN_PROGRESS
 - Active step: `docs/EXEC_PLAN.md` step 13
-- Next step: Run a live Telegram quality retest against version `7d2d85e0-500b-446f-a919-0dac275c036a` on `у меня диабет и бюджет 30 рублей`, `где дешевле купить масло`, and `собери корзину на 3 дня` to verify that the bot now sounds AI-native rather than echoing tool fallback strings; then harden tool contracts in step 14.
+- Next step: Convert `docs/WORLD_CLASS_ROADMAP_2026.md` into the next engineering backlog by prioritizing P0/P1: grounded answer contracts, category read-models, real basket quality, and stronger health/composition reasoning.
 - Blockers:
-  - Live user retest after the new synthesis-pass checkpoint is still pending, so the tool-loop is deployed and smoke-tested but not yet proven by real user chat logs for response quality.
-  - Parsed catalog coverage is too weak for several staple commodity terms (`масло`, `молоко`, `торт`, `гречка`), which limits downstream planner quality.
+  - Live user retests still show that the bot can transport a reply but not yet consistently solve the shopping task at a world-class level.
+  - Parsed catalog coverage and category semantics remain too weak for several staple commodity terms (`масло`, `молоко`, `торт`, `гречка`, `яйца`, `хлеб`), which limits both basket quality and AI planning.
 - Artifacts:
   - `.env.operator.local` (local ignored secret intake file)
   - `docs/BOT_IDENTITY.md`
+  - `docs/WORLD_CLASS_ROADMAP_2026.md`
   - `drizzle.config.ts`
   - `src/db/schema.ts`
   - `src/db/repositories.ts`

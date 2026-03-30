@@ -90,6 +90,11 @@
 - Why: The user explicitly wants the AI to decide what to do from free-form chat input, and the previous planner-plus-heuristics layer still felt fake-smart in live conversations.
 - Impact: Product intelligence is now grounded through tool execution rather than loose planner text, and future work should strengthen tool validation instead of adding more heuristics.
 
+## 2026-03-30 - Compete as a Telegram-first grocery copilot, not as a plain price bot
+- Decision: Position the product as a `Telegram-first household grocery copilot` that combines grounded shopping links, budget baskets, health/composition reasoning, and persistent family memory.
+- Why: Global leaders already dominate separate slices such as meal planning, ingredient scanning, and agentic retail; a narrow “where is it cheaper” bot would be too easy to outgrow and too weak as a moat.
+- Impact: Future roadmap should prioritize basket quality, category read-models, safer health explanations, household memory, and standing intents before cosmetic chat polish.
+
 ## 2026-03-30 - Final user text must come from LLM synthesis, not tool fallback strings
 - Decision: Keep `fallbackText` only as an emergency backup path, strip it out before tool results are sent back to Groq, and add a dedicated final synthesis pass over executed tool outputs.
 - Why: Live user feedback showed that deterministic fallback phrasing still made the bot feel fake-smart even after tool calling was added.

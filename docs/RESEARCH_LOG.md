@@ -220,3 +220,31 @@ _Последнее обновление: 2026-03-30 | Роль: P-BOT Universal
 Источники:
 - https://console.groq.com/docs/tool-use/local-tool-calling
 - https://openrouter.ai/docs/guides/features/structured-outputs
+
+## [ТЕМА: Global product benchmark and roadmap for a world-class grocery copilot]
+_Последнее обновление: 2026-03-30 | Роль: P-BOT Universal Bot Architect_
+Статус: Актуально
+
+- `Instacart` уже задаёт высокий стандарт по сочетанию shopping AI, health intelligence и shoppable flows: компания продвигает `Smart Shop`, `Health Tags`, diet-friendly discovery и grocery shopping inside ChatGPT.
+- `Walmart` уже идёт в сторону `agentic shopping companion`: `Sparky` и интеграции вокруг Gemini/OpenAI показывают, что глобальный retail UX движется от search box к task-completing assistant.
+- `Samsung Food` и `AnyList` задают benchmark по `meal planning -> grocery list -> household routine`, а не по одиночным ответам в чате.
+- `Yuka`, `TruthIn` и `FoodSwitch` задают benchmark по ingredient/health explainability, safer alternatives и clear dietary guidance.
+- Инференс из источников: мировой рынок силён в отдельных slice-решениях, но по собранным данным не видно одного явного продукта, который одновременно объединяет `local price intelligence + grounded conversational shopping + budget baskets + diagnosis-aware composition reasoning + persistent household memory`.
+- Отсюда продуктовый шанс проекта: не делать ещё один price bot, а строить `Telegram-first household grocery copilot`, где агентный диалог всегда опирается на реальные SKU, цены, объяснимый состав и память о семье.
+
+Источники:
+- https://openai.com/index/instacart-partnership
+- https://investors.instacart.com/news-releases/news-release-details/instacart-launches-ai-powered-smart-shop-technology-and-new/
+- https://corporate.walmart.com/news/2025/06/06/walmart-the-future-of-shopping-is-agentic-meet-sparky
+- https://corporate.walmart.com/news/2026/01/11/walmart-and-google-turn-ai-discovery-into-effortless-shopping-experiences
+- https://samsungfood.com/
+- https://samsungfood.com/food-plus/
+- https://samsungfood.com/meal-planner
+- https://news.samsung.com/global/upgraded-samsung-food-raises-the-bar-for-food-experiences-at-ifa-2024
+- https://www.anylist.com/
+- https://www.anylist.com/meal-planning
+- https://yuka.io/en/
+- https://yuka.io/en/app
+- https://truthin.ai/foodscanner
+- https://www.foodswitch.com/apps/
+- https://www.mckinsey.com/~/media/mckinsey/business%20functions/quantumblack/our%20insights/the%20agentic%20commerce%20opportunity%20how%20ai%20agents%20are%20ushering%20in%20a%20new%20era%20for%20consumers%20and%20merchants/the-agentic-commerce-opportunity-how-ai-agents-are-ushering-in-a-new-era-for-consumers-and-merchants_final.pdf

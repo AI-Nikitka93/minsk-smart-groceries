@@ -15,5 +15,6 @@ Status legend: `TODO | IN_PROGRESS | DONE | BLOCKED | CANCELLED`
 13. `IN_PROGRESS` Execute Stabilization Sprint: separate profile updates from search, add exact-match gates, add Markdown-to-plain-text retry, and ensure final replies are synthesized by Groq after tool execution instead of leaking deterministic fallback text.
 14. `TODO` Harden the new tool-contract layer for agentic actions (`save_user_profile`, `search_products`, `find_cheapest_offer`, `build_budget_basket`, `analyze_composition`) with stronger validation, cleaner tool payloads, and live-proof of response quality.
 15. `TODO` Improve read-model coverage for staple commodity terms (`масло`, `молоко`, `гречка`, `торт`, `хлеб`, `яйца`).
+16. `TODO` Translate the world-class market roadmap into delivery: basket engine v2, category read-models, health/composition scoring, household memory, and standing intents.
 11. `DONE` Publish the codebase as a public GitHub repository with Apache-2.0 license and bilingual README files.
 12. `DONE` Add deploy scaffolding for Cloudflare bot-worker and GitHub Actions parser-worker execution.
