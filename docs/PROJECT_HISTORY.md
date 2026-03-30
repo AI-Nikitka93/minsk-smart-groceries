@@ -286,3 +286,10 @@
 Изменены файлы: src/apps/bot-worker/index.ts, docs/STATE.md, docs/state.json, docs/EXEC_PLAN.md, docs/DECISIONS.md, docs/PROJECT_HISTORY.md
 Результат/доказательство: `npm run typecheck` -> success; `rg -n "TODO|placeholder|insert code" "src/apps/bot-worker/index.ts"` -> только реальные `input_field_placeholder`; `npx wrangler deploy --config "wrangler.toml"` -> version `8e155b46-87cd-4755-b0f4-1156b213a86b`; `GET /health` -> `ok: true`; synthetic webhook smoke-tests (`у меня диабет и бюджет 30 рублей`, `где дешевле купить масло`, `собери корзину на 3 дня`) -> `hookStatus 200`, `delta=2`
 Следующий шаг: Добавить evaluator/critic слой и использовать новый session context для follow-up handling, чтобы бот лучше понимал уточнения и слабые tool outcomes.
+
+Дата и время: 2026-03-30 17:39
+Роль: P-BOT Universal Bot Architect
+Сделано: Реализован второй инженерный checkpoint из AI intelligence map: добавлен evaluator/critic layer перед финальной Groq synthesis, который отбраковывает слабые tool outcomes (`needs_clarification`, weak cheapest, weak basket, empty search-like results) и принудительно переводит ответ в grounded clarification/refusal вместо fake-smart текста.
+Изменены файлы: src/apps/bot-worker/index.ts, docs/STATE.md, docs/state.json, docs/DECISIONS.md, docs/PROJECT_HISTORY.md
+Результат/доказательство: `npm run typecheck` -> success; `rg -n "TODO|placeholder|insert code" "src/apps/bot-worker/index.ts"` -> только реальные `input_field_placeholder`; `npx wrangler deploy --config "wrangler.toml"` -> version `303d2522-6d49-47ee-b80c-7da5792c8051`; synthetic webhook smoke-tests (`у меня диабет и бюджет 30 рублей`, `где дешевле купить масло`, `собери корзину на 3 дня`) -> `hookStatus 200`, `delta=2`
+Следующий шаг: Углубить память и follow-up handling: использовать session context в planner/tool selection и добавить richer household memory вместо чисто краткой session state.

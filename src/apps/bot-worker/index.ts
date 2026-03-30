@@ -499,6 +499,13 @@ interface AgenticToolOutcome {
   sessionPatch?: SessionContextPatch;
 }
 
+interface AgenticEvaluation {
+  readyForSynthesis: boolean;
+  forcedReply?: AgenticReply;
+  criticNotes: string[];
+  trustScore: number;
+}
+
 let cachedDatabase: ReturnType<typeof createDatabase> | null = null;
 let cachedDatabaseKey: string | null = null;
 
@@ -1566,12 +1573,124 @@ function buildAgenticFallbackReply(outcome: AgenticToolOutcome): AgenticReply {
     text: fallbackText,
     parseMode: outcome.parseMode,
     replyMarkup: outcome.replyMarkup,
+    sessionPatch: outcome.sessionPatch,
   };
 }
 
 function stripFallbackTextForModel(payload: Record<string, unknown>): Record<string, unknown> {
   const { fallbackText: _fallbackText, ...rest } = payload;
   return rest;
+}
+
+function evaluateAgenticReplyReadiness(
+  userQuery: string,
+  toolTrace: Array<{ name: string; payload: Record<string, unknown> }>,
+  lastToolOutcome: AgenticToolOutcome,
+): AgenticEvaluation {
+  const payload = lastToolOutcome.payload;
+  const status = typeof payload.status === "string" ? payload.status : "ok";
+  const criticNotes: string[] = [];
+  let trustScore = 1;
+
+  if (status === "error") {
+    criticNotes.push("Tool execution returned an error status.");
+    trustScore -= 0.7;
+    return forceClarificationReply(lastToolOutcome, userQuery, criticNotes, trustScore);
+  }
+
+  if (status === "needs_clarification" || status === "no_results") {
+    criticNotes.push(`Tool result requires clarification: ${status}.`);
+    trustScore -= 0.5;
+    return forceClarificationReply(lastToolOutcome, userQuery, criticNotes, trustScore);
+  }
+
+  if (lastToolOutcome.name === "find_cheapest_offer") {
+    const exactMatchFound = payload.exactMatchFound === true;
+    const productCount = Array.isArray(payload.products) ? payload.products.length : 0;
+    if (!exactMatchFound || productCount === 0) {
+      criticNotes.push("Cheapest lookup lacks confident exact match.");
+      trustScore -= 0.45;
+      return forceClarificationReply(lastToolOutcome, userQuery, criticNotes, trustScore);
+    }
+  }
+
+  if (lastToolOutcome.name === "build_budget_basket") {
+    const quality = asPlainObject(payload.quality);
+    const reliable = quality.reliable === true;
+    const familyCount = typeof quality.familyCount === "number" ? quality.familyCount : 0;
+    const requiredFamilyCount = typeof quality.requiredFamilyCount === "number" ? quality.requiredFamilyCount : 0;
+    const productCount = Array.isArray(payload.products) ? payload.products.length : 0;
+    if (!reliable || productCount < 3 || familyCount < Math.max(2, requiredFamilyCount)) {
+      criticNotes.push("Basket quality is too weak for final synthesis.");
+      trustScore -= 0.55;
+      return forceClarificationReply(lastToolOutcome, userQuery, criticNotes, trustScore);
+    }
+  }
+
+  if (lastToolOutcome.name === "search_products" || lastToolOutcome.name === "analyze_composition") {
+    const productCount = Array.isArray(payload.products) ? payload.products.length : 0;
+    if (productCount === 0) {
+      criticNotes.push("Search-like tool returned zero grounded products.");
+      trustScore -= 0.45;
+      return forceClarificationReply(lastToolOutcome, userQuery, criticNotes, trustScore);
+    }
+  }
+
+  if (toolTrace.length === 0) {
+    criticNotes.push("No tool results were recorded before synthesis.");
+    trustScore -= 0.5;
+    return forceClarificationReply(lastToolOutcome, userQuery, criticNotes, trustScore);
+  }
+
+  if (lastToolOutcome.name === "save_user_profile" && toolTrace.length === 1) {
+    criticNotes.push("Profile update is grounded and should be explained directly.");
+  }
+
+  if (Array.isArray(payload.products) && payload.products.length > 0) {
+    const malformedProducts = payload.products.filter((product) => {
+      const candidate = asPlainObject(product);
+      return typeof candidate.title !== "string" || typeof candidate.store !== "string" || typeof candidate.url !== "string";
+    });
+    if (malformedProducts.length > 0) {
+      criticNotes.push("Some products are missing grounding fields.");
+      trustScore -= 0.3;
+    }
+  }
+
+  return {
+    readyForSynthesis: true,
+    criticNotes,
+    trustScore: Math.max(0, Number(trustScore.toFixed(2))),
+  };
+}
+
+function forceClarificationReply(
+  outcome: AgenticToolOutcome,
+  userQuery: string,
+  criticNotes: string[],
+  trustScore: number,
+): AgenticEvaluation {
+  const clarificationQuestion =
+    typeof outcome.payload.clarificationQuestion === "string" && outcome.payload.clarificationQuestion.trim().length > 0
+      ? outcome.payload.clarificationQuestion.trim()
+      : buildSearchClarificationQuestion(userQuery);
+
+  const forcedReply: AgenticReply = {
+    text: clarificationQuestion,
+    replyMarkup: outcome.replyMarkup,
+    parseMode: undefined,
+    sessionPatch: outcome.sessionPatch ?? buildSessionPatch(userQuery, "clarify", {
+      clarificationQuestion,
+      outcomeStatus: typeof outcome.payload.status === "string" ? outcome.payload.status : "needs_clarification",
+    }),
+  };
+
+  return {
+    readyForSynthesis: false,
+    forcedReply,
+    criticNotes,
+    trustScore: Math.max(0, Number(trustScore.toFixed(2))),
+  };
 }
 
 async function synthesizeAgenticReply(
@@ -1581,13 +1700,19 @@ async function synthesizeAgenticReply(
   toolTrace: Array<{ name: string; payload: Record<string, unknown> }>,
   lastToolOutcome: AgenticToolOutcome,
 ): Promise<AgenticReply> {
+  const evaluation = evaluateAgenticReplyReadiness(userQuery, toolTrace, lastToolOutcome);
+  if (!evaluation.readyForSynthesis && evaluation.forcedReply) {
+    return evaluation.forcedReply;
+  }
+
   try {
-    const content = await callGroqAgenticSynthesis(env, userQuery, profile, toolTrace);
+    const content = await callGroqAgenticSynthesis(env, userQuery, profile, toolTrace, evaluation);
     if (content) {
       return {
         text: content,
         parseMode: lastToolOutcome.parseMode ?? "Markdown",
         replyMarkup: lastToolOutcome.replyMarkup,
+        sessionPatch: lastToolOutcome.sessionPatch,
       };
     }
   } catch (error) {
@@ -1602,6 +1727,7 @@ async function callGroqAgenticSynthesis(
   userQuery: string,
   profile: PersistedUserProfile | null,
   toolTrace: Array<{ name: string; payload: Record<string, unknown> }>,
+  evaluation: AgenticEvaluation,
 ): Promise<string> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort("Groq agentic synthesis timeout"), GROQ_TIMEOUT_MS);
@@ -1644,6 +1770,10 @@ async function callGroqAgenticSynthesis(
                 query: userQuery,
                 currentProfile: serializeProfileForModel(profile),
                 toolResults: toolTrace,
+                critic: {
+                  trustScore: evaluation.trustScore,
+                  notes: evaluation.criticNotes,
+                },
               },
               null,
               2,

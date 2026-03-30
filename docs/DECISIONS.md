@@ -119,3 +119,8 @@
 - Decision: The first engineering slice of the new AI track is planner contract v2 plus tool argument/result validation and lightweight session memory stored in `user_profile.notification_settings.sessionContext`.
 - Why: The current bot was too trusting of model outputs and too stateless between turns, which made follow-ups feel fake-smart even when the transport and tool loop technically worked.
 - Impact: Future answers can preserve short conversational context, clarification requests become first-class state, and the next improvement should be an evaluator/critic layer instead of more ad-hoc heuristics.
+
+## 2026-03-30 - Final synthesis must be gated by an evaluator/critic layer
+- Decision: Add a deterministic evaluator/critic before final Groq synthesis so tool outcomes are checked for weak grounding, missing exact matches, weak baskets, and clarification-required states before any “smart” natural-language answer is generated.
+- Why: Without a critic, the bot could still produce polished text over weak tool outcomes, which recreates the same fake-smart failure mode under a more advanced architecture.
+- Impact: Clarification/refusal is now a first-class gated outcome, Groq synthesis receives critic notes and trust score, and the next AI step should focus on deeper memory/evals rather than bypassing this gate.

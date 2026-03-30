@@ -1,14 +1,14 @@
 # Current State
 
 - Goal: Move from approved architecture to a genuinely intelligent Telegram grocery copilot for Smart Grocery Assistant.
-- Current task: First AI implementation checkpoint is now live in `bot-worker`: planner contract v2, tool argument/result validation, clarification-aware session state, and lightweight session memory in `user_profile.notification_settings.sessionContext` are deployed to Cloudflare Workers.
+- Current task: Second AI implementation checkpoint is now live in `bot-worker`: an evaluator/critic layer now inspects tool outcomes before final synthesis and forces clarification/refusal when grounded data is weak, while the earlier planner/session contract remains active.
 - Status: IN_PROGRESS
 - Active step: `docs/EXEC_PLAN.md` step 17
-- Next step: Continue the AI track with evaluator/critic logic and use the new session context to improve follow-up handling, clarification quality, and rejection of weak tool outcomes before final synthesis.
+- Next step: Use the new critic + session context to improve real follow-up handling and introduce richer session/household memory so the bot can continue conversations instead of restarting intent extraction each turn.
 - Blockers:
   - Live user retests still show that the bot can transport a reply but not yet consistently solve the shopping task at a world-class level.
   - Parsed catalog coverage and category semantics remain too weak for several staple commodity terms (`масло`, `молоко`, `торт`, `гречка`, `яйца`, `хлеб`), which limits both basket quality and AI planning.
-  - Session memory now exists only in lightweight short-form state; there is still no evaluator/critic layer and no deeper household routine memory, so follow-ups can improve but are not yet world-class.
+  - Session memory now exists only in lightweight short-form state; there is still no deeper household routine memory or evaluator-backed golden-set harness, so multi-turn usefulness and quality regression control are still limited.
 - Artifacts:
   - `.env.operator.local` (local ignored secret intake file)
   - `docs/AI_INTELLIGENCE_MAP_2026.md`
