@@ -17,6 +17,7 @@ Status legend: `TODO | IN_PROGRESS | DONE | BLOCKED | CANCELLED`
 15. `IN_PROGRESS` Improve read-model coverage for staple commodity terms (`масло`, `молоко`, `гречка`, `торт`, `хлеб`, `яйца`).
 16. `IN_PROGRESS` Translate the world-class market roadmap into delivery: basket engine v2, category read-models, health/composition scoring, household memory, standing intents, and an explicit AI intelligence track.
 17. `IN_PROGRESS` Convert `docs/AI_INTELLIGENCE_MAP_2026.md` into engineering work: planner contract v2, tool/result validators, richer session/household memory, evaluator/critic layer, and session-aware follow-up routing.
-18. `TODO` Add an evaluator-backed golden-set harness plus proactive household routines so multi-turn shopping quality can be measured and improved instead of only debugged live.
+18. `IN_PROGRESS` Add an evaluator-backed golden-set harness plus proactive household routines so multi-turn shopping quality can be measured and improved instead of only debugged live.
+19. `TODO` Expand golden-set to v2 with staple exactness, basket realism, diagnosis-aware follow-ups, clarification quality, and safer-swap regressions.
 11. `DONE` Publish the codebase as a public GitHub repository with Apache-2.0 license and bilingual README files.
 12. `DONE` Add deploy scaffolding for Cloudflare bot-worker and GitHub Actions parser-worker execution.

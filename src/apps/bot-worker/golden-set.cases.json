@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "profile_save_household",
+      "description": "Profile-only message should persist budget and household size without polluting product memory.",
+      "turns": [
+        "у меня диабет и бюджет 30 рублей нас 4"
+      ],
+      "expect": {
+        "botRepliesAtLeast": 1,
+        "profile": {
+          "budgetMinor": 3000,
+          "householdSize": 4
+        },
+        "session": {
+          "lastAction": "save_profile",
+          "lastOutcomeStatus": "ok",
+          "lastCatalogQueriesLength": 0
+        }
+      }
+    },
+    {
+      "id": "cheapest_followup_milk",
+      "description": "Cheap-price follow-up should stay anchored to the previous commodity query instead of inventing a new product.",
+      "turns": [
+        "где дешевле купить молоко",
+        "а подешевле"
+      ],
+      "expect": {
+        "botRepliesAtLeast": 2,
+        "session": {
+          "lastAction": "find_cheapest",
+          "lastOutcomeStatus": "ok",
+          "lastCatalogQueriesIncludes": [
+            "молоко"
+          ]
+        }
+      }
+    },
+    {
+      "id": "basket_week_diabetes",
+      "description": "Weekly diabetes basket request should stay in basket/clarification mode instead of degrading into a random product search.",
+      "turns": [
+        "собери корзину на неделю при диабете"
+      ],
+      "expect": {
+        "botRepliesAtLeast": 1,
+        "session": {
+          "lastActionOneOf": [
+            "build_basket",
+            "clarify"
+          ],
+          "lastOutcomeStatusOneOf": [
+            "ok",
+            "needs_clarification"
+          ]
+        }
+      }
+    }
+  ]
+}

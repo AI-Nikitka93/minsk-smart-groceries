@@ -9,6 +9,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "parser:run": "ts-node src/apps/parser-worker/cli.ts",
+    "eval:golden": "ts-node src/apps/bot-worker/golden-set.ts",
     "deploy:bot": "wrangler deploy"
   },
   "dependencies": {

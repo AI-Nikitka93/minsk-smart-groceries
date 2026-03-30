@@ -511,6 +511,7 @@ interface AgenticReply {
   parseMode?: string;
   replyMarkup?: Record<string, unknown>;
   sessionPatch?: SessionContextPatch;
+  updatedProfile?: PersistedUserProfile | null;
 }
 
 interface AgenticToolOutcome {
@@ -673,7 +674,7 @@ async function handleMessage(message: TelegramMessage, env: BotWorkerEnv): Promi
       db,
       message,
       agenticReply.text,
-      persistedProfile,
+      agenticReply.updatedProfile ?? persistedProfile,
       {
         replyMarkup: agenticReply.replyMarkup,
         parseMode: agenticReply.parseMode,
@@ -850,6 +851,7 @@ async function runAgenticAssistant(
       parseMode: undefined,
       replyMarkup: directProfileOutcome.replyMarkup,
       sessionPatch: directProfileOutcome.sessionPatch,
+      updatedProfile,
     };
   }
 
@@ -925,6 +927,7 @@ async function runAgenticAssistant(
             parseMode: lastToolOutcome?.parseMode ?? "Markdown",
             replyMarkup: lastToolOutcome?.replyMarkup,
             sessionPatch: lastToolOutcome?.sessionPatch,
+            updatedProfile: currentProfile,
           };
         }
 
@@ -1709,6 +1712,7 @@ function buildAgenticFallbackReply(outcome: AgenticToolOutcome): AgenticReply {
     parseMode: outcome.parseMode,
     replyMarkup: outcome.replyMarkup,
     sessionPatch: outcome.sessionPatch,
+    updatedProfile: outcome.updatedProfile,
   };
 }
 
@@ -1818,6 +1822,7 @@ function forceClarificationReply(
       clarificationQuestion,
       outcomeStatus: typeof outcome.payload.status === "string" ? outcome.payload.status : "needs_clarification",
     }),
+    updatedProfile: outcome.updatedProfile,
   };
 
   return {
@@ -1848,6 +1853,7 @@ async function synthesizeAgenticReply(
         parseMode: lastToolOutcome.parseMode ?? "Markdown",
         replyMarkup: lastToolOutcome.replyMarkup,
         sessionPatch: lastToolOutcome.sessionPatch,
+        updatedProfile: lastToolOutcome.updatedProfile ?? profile,
       };
     }
   } catch (error) {
@@ -3755,21 +3761,21 @@ function isProfileUpdateOnlyQuery(
 function looksLikeStandaloneProfileUpdate(text: string): boolean {
   const normalized = normalizeQuery(text);
   return (
-    /\bу меня\b/u.test(normalized) ||
-    /\bмой бюджет\b/u.test(normalized) ||
-    /\bмне нельзя\b/u.test(normalized) ||
-    /\bаллерг/u.test(normalized) ||
-    /\bнас\s+\d{1,2}\b/u.test(normalized) ||
-    /\bсемь[яи]\b/u.test(normalized) ||
-    /\bдля семьи\b/u.test(normalized) ||
-    /\bна двоих\b/u.test(normalized) ||
-    /\bна троих\b/u.test(normalized) ||
-    /\bна четверых\b/u.test(normalized) ||
-    /\bбез лактоз/u.test(normalized) ||
-    /\bбез глютен/u.test(normalized) ||
-    /\bне переношу\b/u.test(normalized) ||
-    /\bисключи\b/u.test(normalized) ||
-    /\bучти\b/u.test(normalized)
+    /(?:^|\s)у меня(?:\s|$)/u.test(normalized) ||
+    /(?:^|\s)мой бюджет(?:\s|$)/u.test(normalized) ||
+    /(?:^|\s)мне нельзя(?:\s|$)/u.test(normalized) ||
+    /(?:^|\s)аллерг/u.test(normalized) ||
+    /(?:^|\s)нас\s+\d{1,2}(?:\s|$)/u.test(normalized) ||
+    /(?:^|\s)семь[яи](?:\s|$)/u.test(normalized) ||
+    /(?:^|\s)для семьи(?:\s|$)/u.test(normalized) ||
+    /(?:^|\s)на двоих(?:\s|$)/u.test(normalized) ||
+    /(?:^|\s)на троих(?:\s|$)/u.test(normalized) ||
+    /(?:^|\s)на четверых(?:\s|$)/u.test(normalized) ||
+    /(?:^|\s)без лактоз/u.test(normalized) ||
+    /(?:^|\s)без глютен/u.test(normalized) ||
+    /(?:^|\s)не переношу(?:\s|$)/u.test(normalized) ||
+    /(?:^|\s)исключи(?:\s|$)/u.test(normalized) ||
+    /(?:^|\s)учти(?:\s|$)/u.test(normalized)
   );
 }
 

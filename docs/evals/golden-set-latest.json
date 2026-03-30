@@ -1,0 +1,87 @@
+{
+  "version": 1,
+  "checkedAt": "2026-03-30T15:29:07.004Z",
+  "workerUrl": "https://minsk-smart-groceries-bot.aiartnikitka93.workers.dev/webhook",
+  "chatId": 6297262714,
+  "passed": true,
+  "passRate": "3/3",
+  "summary": {
+    "total": 3,
+    "passed": 3,
+    "failed": 0
+  },
+  "results": [
+    {
+      "id": "profile_save_household",
+      "description": "Profile-only message should persist budget and household size without polluting product memory.",
+      "passed": true,
+      "issues": [],
+      "hookStatuses": [
+        200
+      ],
+      "botReplyCount": 1,
+      "profile": {
+        "budgetMinor": 3000,
+        "householdSize": 4,
+        "session": {
+          "lastUserQuery": "у меня диабет и бюджет 30 рублей нас 4",
+          "lastAction": "save_profile",
+          "lastCatalogQueries": [],
+          "lastClarificationQuestion": null,
+          "lastOutcomeStatus": "ok",
+          "updatedAt": "2026-03-30 15:28:57"
+        }
+      }
+    },
+    {
+      "id": "cheapest_followup_milk",
+      "description": "Cheap-price follow-up should stay anchored to the previous commodity query instead of inventing a new product.",
+      "passed": true,
+      "issues": [],
+      "hookStatuses": [
+        200,
+        200
+      ],
+      "botReplyCount": 2,
+      "profile": {
+        "budgetMinor": 3000,
+        "householdSize": 4,
+        "session": {
+          "lastUserQuery": "а подешевле",
+          "lastAction": "find_cheapest",
+          "lastCatalogQueries": [
+            "молоко"
+          ],
+          "lastClarificationQuestion": null,
+          "lastOutcomeStatus": "ok",
+          "updatedAt": "2026-03-30 15:29:02"
+        }
+      }
+    },
+    {
+      "id": "basket_week_diabetes",
+      "description": "Weekly diabetes basket request should stay in basket/clarification mode instead of degrading into a random product search.",
+      "passed": true,
+      "issues": [],
+      "hookStatuses": [
+        200
+      ],
+      "botReplyCount": 1,
+      "profile": {
+        "budgetMinor": 3000,
+        "householdSize": 4,
+        "session": {
+          "lastUserQuery": "собери корзину на неделю при диабете",
+          "lastAction": "clarify",
+          "lastCatalogQueries": [
+            "собери корзину на неделю при диабете",
+            "молоко"
+          ],
+          "lastClarificationQuestion": "Уточните, пожалуйста, тип корзины: бюджетная, полезная, без лактозы, при диабете, на 3 дня или на неделю.",
+          "lastOutcomeStatus": "needs_clarification",
+          "updatedAt": "2026-03-30 15:29:04"
+        }
+      }
+    }
+  ]
+}

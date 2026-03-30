@@ -1,14 +1,14 @@
 # Current State
 
 - Goal: Move from approved architecture to a genuinely intelligent Telegram grocery copilot for Smart Grocery Assistant.
-- Current task: Third AI implementation checkpoint is now live in `bot-worker`: richer household/session memory now persists `householdSize`, profile-only messages short-circuit into `save_profile`, and direct follow-up routing keeps phrases like `а подешевле` anchored to the last grounded product query instead of drifting into fake intent changes.
+- Current task: Golden-set quality gate v1 is now live for `bot-worker`: real multi-turn cases run through Telegram -> Cloudflare Worker -> Turso, while the third AI checkpoint keeps profile-only messages and cheapest follow-ups grounded through session/household memory.
 - Status: IN_PROGRESS
 - Active step: `docs/EXEC_PLAN.md` step 17
-- Next step: Move from memory plumbing to quality control: add an evaluator-backed golden-set harness for multi-turn shopping flows and start proactive household routines on top of the new session/family memory.
+- Next step: Expand golden-set to v2 (cheapest exactness, basket realism, diagnosis-aware follow-ups, clarification quality) and then start proactive household routines on top of the new session/family memory.
 - Blockers:
   - Live user retests still show that the bot can transport a reply but not yet consistently solve the shopping task at a world-class level.
   - Parsed catalog coverage and category semantics remain too weak for several staple commodity terms (`масло`, `молоко`, `торт`, `гречка`, `яйца`, `хлеб`), which limits both basket quality and AI planning.
-  - Session and household memory now work for profile saves and cheapest follow-ups, but there is still no evaluator-backed golden-set harness or proactive routine layer, so multi-turn quality can still regress silently.
+  - Golden-set v1 exists and passes, but coverage is still narrow: it does not yet gate cheapest exactness on all staple commodities, basket realism, safer swaps, or proactive household routines.
 - Artifacts:
   - `.env.operator.local` (local ignored secret intake file)
   - `docs/AI_INTELLIGENCE_MAP_2026.md`

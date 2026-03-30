@@ -23,6 +23,7 @@ Agentic stabilization sprint for `bot-worker`: Groq tool-loop over Turso with pr
 - License: `LICENSE`
 - Bot identity pack: `docs/BOT_IDENTITY.md`
 - AI intelligence map: `docs/AI_INTELLIGENCE_MAP_2026.md`
+- Golden-set baseline: `docs/GOLDEN_SET_BASELINE_2026-03-30.md`
 - Cloudflare config: `wrangler.toml`
 - Node bootstrap: `package.json`, `tsconfig.json`
 - GitHub Actions workflow: `.github/workflows/parser.yml`
@@ -37,6 +38,12 @@ Agentic stabilization sprint for `bot-worker`: Groq tool-loop over Turso with pr
 - Project memory: `docs/`
 - Master execution anchor: `EXECUTION_PLAN.md`
 - Research knowledge map: `docs/RESEARCH_LOG.md`
+
+## Key Commands
+- Typecheck: `npm run typecheck`
+- Parser runner: `npm run parser:run`
+- Golden-set live evals: `npm run eval:golden`
+- Deploy bot worker: `npm run deploy:bot`
 
 ## Working Rules
 - Read project memory in this order: `AGENTS.md` -> `docs/STATE.md` -> `docs/state.json` -> `docs/EXEC_PLAN.md` -> recent `docs/PROJECT_HISTORY.md` -> `docs/DECISIONS.md`

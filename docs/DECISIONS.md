@@ -129,3 +129,8 @@
 - Decision: Keep diagnoses and family context in persistent memory for ranking and follow-up resolution, but do not let saved profile state auto-convert every future message into `diagnosis_safe`; follow-up modifiers like `а подешевле` must stay anchored to the last grounded product query.
 - Why: Live verification showed that persistent health context is useful, but if it rewrites the user's current intent, the bot stops feeling intelligent and starts answering the wrong task confidently.
 - Impact: `bot-worker` now short-circuits profile-only updates into `save_profile`, strips follow-up modifier terms from explicit product search, and uses a direct follow-up router before the LLM loop when the session already contains a grounded product anchor.
+
+## 2026-03-30 - Multi-turn quality must be gated by live golden-set evals
+- Decision: Introduce `golden-set v1` as a release-quality gate that runs real multi-turn scenarios through Telegram, the deployed Cloudflare Worker, and Turso state checks instead of relying only on synthetic one-off probes.
+- Why: Recent regressions in profile routing and follow-up memory looked fixed in isolated checks but still needed a stable, repeatable multi-turn harness to prove they stayed fixed over time.
+- Impact: `npm run eval:golden` is now a first-class project command, `docs/evals/golden-set-latest.json` becomes the latest machine-readable result, and future AI improvements should expand this gate before they claim world-class behavior.
