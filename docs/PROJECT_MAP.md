@@ -27,6 +27,7 @@ Smart Grocery Assistant for Minsk: Telegram bot plus Telegram channel that track
 - `advisory-engine`: basket optimization and composition analysis.
 - `ops-observability`: logs, health checks, exports, and admin controls.
 - `docs/WORLD_CLASS_ROADMAP_2026.md`: strategic benchmark and improvement map against global product leaders.
+- `docs/AI_INTELLIGENCE_MAP_2026.md`: explicit AI architecture map for building a genuinely intelligent grocery copilot instead of a chat wrapper over search.
 - `docs/DELIVERY_BACKLOG_2026-03-30.md`: execution backlog derived from the world-class roadmap.
 
 ## External Dependencies
@@ -50,6 +51,7 @@ Smart Grocery Assistant for Minsk: Telegram bot plus Telegram channel that track
 - Parsing should avoid heavyweight browser automation by default.
 - Architecture must respect Cloudflare free-tier limits, especially HTTP worker constraints, while moving parser scheduling to GitHub Actions cron.
 - Product strategy now targets a differentiated global-quality niche: `agentic grocery copilot` rather than a narrow price-lookup bot.
+- The roadmap now explicitly includes an `AI intelligence track`: planner contracts, grounded tool orchestration, memory layers, evaluator/critic logic, and proactive grocery routines.
 
 ## Main Risks
 - Free-tier service suspensions or sleep policies.

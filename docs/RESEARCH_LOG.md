@@ -248,3 +248,31 @@ _Последнее обновление: 2026-03-30 | Роль: P-BOT Universal
 - https://truthin.ai/foodscanner
 - https://www.foodswitch.com/apps/
 - https://www.mckinsey.com/~/media/mckinsey/business%20functions/quantumblack/our%20insights/the%20agentic%20commerce%20opportunity%20how%20ai%20agents%20are%20ushering%20in%20a%20new%20era%20for%20consumers%20and%20merchants/the-agentic-commerce-opportunity-how-ai-agents-are-ushering-in-a-new-era-for-consumers-and-merchants_final.pdf
+
+## [ТЕМА: AI implementation map for a truly smart grocery bot]
+_Последнее обновление: 2026-03-30 | Роль: P-BOT Universal Bot Architect_
+Статус: Актуально
+
+- Отдельный недостающий слой roadmap-а подтверждён: мировые shopping/copilot продукты выигрывают не одной моделью, а связкой `planner -> tools -> structured state -> memory -> evaluator -> final synthesis`.
+- Официальный `OpenAI Agentic Commerce` guide прямо задаёт нужный commerce pattern: агент рассуждает по `structured state`, вызывает `tools` на каждом шаге и держит пользователя в курсе реального progress.
+- Официальные cookbook-patterns OpenAI по personalization / long-term memory показывают, что сильный assistant требует не только profile table, но и selective memory injection, session notes и consolidation, иначе long-horizon usefulness быстро деградирует.
+- Официальный model-selection / eval guidance OpenAI подтверждает, что для production agent надо мерить не только “красоту ответа”, а `factuality`, `hallucination rate`, `tool-error rate`, edge cases и reliability integrated tools.
+- Официальные docs Groq и OpenRouter подтверждают, что `tool calling` и `structured outputs` уже подходят для нашего zero-cost stack, но не гарантируют semantic accuracy сами по себе; значит planner и answer path должны быть поддержаны read-models, validators и evaluator-layer.
+- Вывод: missing strategic track для проекта — не ещё один heuristic fix, а explicit `AI intelligence track`: planner contract, tool/result validation, session+household memory, nutrition intelligence, evaluator/critic, proactive grocery routines.
+- Создан отдельный артефакт: `docs/AI_INTELLIGENCE_MAP_2026.md`.
+
+Источники:
+- https://developers.openai.com/commerce/
+- https://developers.openai.com/cookbook/examples/agents_sdk/context_personalization/
+- https://developers.openai.com/cookbook/examples/partners/model_selection_guide/model_selection_guide/
+- https://developers.openai.com/cookbook/examples/agents_sdk/multi-agent-portfolio-collaboration/multi_agent_portfolio_collaboration/
+- https://console.groq.com/docs/tool-use/overview
+- https://console.groq.com/docs/tool-use/local-tool-calling
+- https://openrouter.ai/docs/guides/features/structured-outputs
+- https://openai.com/index/instacart-partnership
+- https://investors.instacart.com/node/8041/pdf
+- https://corporate.walmart.com/news/2025/06/06/walmart-the-future-of-shopping-is-agentic-meet-sparky
+- https://corporate.walmart.com/news/2026/01/11/walmart-and-google-turn-ai-discovery-into-effortless-shopping-experiences
+- https://samsungfood.com/
+- https://samsungfood.com/meal-planner
+- https://yuka.io/en/

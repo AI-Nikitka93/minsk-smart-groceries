@@ -33,3 +33,4 @@ Status legend: `TODO | IN_PROGRESS | DONE | BLOCKED | CANCELLED`
 28. `DONE` Validate architecture against free-tier quotas and single-point-of-failure risks.
 29. `DONE` Produce implementation-ready module list and sequence.
 30. `DONE` Hand off to engineering prompt with updated memory and research snapshot.
+31. `IN_PROGRESS` Define explicit AI intelligence architecture for a genuinely smart grocery copilot: planner contracts, grounded tools, memory layers, health reasoning, evaluator, and proactive routines.

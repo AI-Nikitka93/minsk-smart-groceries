@@ -1,15 +1,17 @@
 # Current State
 
-- Goal: Move from approved architecture to deployable parser and Telegram bot workers for Smart Grocery Assistant.
-- Current task: Category read-model v1 for staple goods is now wired into `bot-worker`: commodity-aware search expansion and row filtering are applied for `масло`, `молоко`, `гречка`, `хлеб`, and `яйца`, so `cheapest` and direct staple lookups stop leaning entirely on noisy raw catalog matches.
+- Goal: Move from approved architecture to a genuinely intelligent Telegram grocery copilot for Smart Grocery Assistant.
+- Current task: AI implementation research is now formalized into an explicit project track: `docs/AI_INTELLIGENCE_MAP_2026.md` defines the missing smart-bot layers (`planner`, `grounded tools`, `read-model intelligence`, `memory`, `health reasoning`, `evaluator`, `proactive routines`) that must sit above the current bot-worker.
 - Status: IN_PROGRESS
-- Active step: `docs/EXEC_PLAN.md` step 13
-- Next step: Deepen the staple read-model into basket execution: reuse the new commodity profiles inside basket seed generation and then start extracting this logic into a dedicated read-model layer instead of keeping it only inside `bot-worker`.
+- Active step: `docs/EXEC_PLAN.md` step 16
+- Next step: Convert the new AI intelligence map into implementation work: start with planner contract hardening, tool/result validation, and session memory so the bot moves from transport-ready replies to genuinely intelligent orchestration.
 - Blockers:
   - Live user retests still show that the bot can transport a reply but not yet consistently solve the shopping task at a world-class level.
   - Parsed catalog coverage and category semantics remain too weak for several staple commodity terms (`масло`, `молоко`, `торт`, `гречка`, `яйца`, `хлеб`), which limits both basket quality and AI planning.
+  - The roadmap previously lacked an explicit AI architecture track; without it, the project kept treating symptoms in ranking and baskets instead of building a real grocery copilot brain.
 - Artifacts:
   - `.env.operator.local` (local ignored secret intake file)
+  - `docs/AI_INTELLIGENCE_MAP_2026.md`
   - `docs/BOT_IDENTITY.md`
   - `docs/DELIVERY_BACKLOG_2026-03-30.md`
   - `docs/WORLD_CLASS_ROADMAP_2026.md`

@@ -109,3 +109,8 @@
 - Decision: Keep `fallbackText` only as an emergency backup path, strip it out before tool results are sent back to Groq, and add a dedicated final synthesis pass over executed tool outputs.
 - Why: Live user feedback showed that deterministic fallback phrasing still made the bot feel fake-smart even after tool calling was added.
 - Impact: The answer path now becomes `user -> tool loop -> grounded tool results -> Groq synthesis -> Telegram`, while canned text is reserved only for failure handling.
+
+## 2026-03-30 - Explicit AI intelligence architecture is now a first-class project track
+- Decision: Add a dedicated AI architecture track to the project through `docs/AI_INTELLIGENCE_MAP_2026.md`, covering planner contracts, grounded tools, read-model intelligence, memory layers, health reasoning, evaluator/critic, and proactive grocery routines.
+- Why: User feedback and live audits showed that market positioning alone was not enough; without an explicit smart-bot architecture, the project kept patching symptoms in ranking and baskets instead of building a genuinely intelligent grocery copilot.
+- Impact: Future work should prioritize planner/result contracts, session + household memory, nutrition intelligence, and evaluator layers before more cosmetic answer polish.

@@ -272,3 +272,10 @@
 Изменены файлы: src/apps/bot-worker/index.ts, docs/STATE.md, docs/state.json, docs/EXEC_PLAN.md, docs/DECISIONS.md, docs/PROJECT_HISTORY.md
 Результат/доказательство: `npm run typecheck` -> success; `rg -n "TODO|placeholder|insert code" "src/apps/bot-worker/index.ts"` -> only real Telegram `input_field_placeholder` matches; `npx wrangler deploy --config "wrangler.toml"` -> version `b14e09da-a35d-4ecf-ae05-fc19ccb58cce`; `GET /health` -> `ok: true`; synthetic webhook smoke-tests (`где дешевле купить масло`, `где дешевле купить молоко`, `где дешевле купить яйца`, `покажи гречку и ссылки`) -> `HookResponse=ok`, `delta=2`
 Следующий шаг: Протянуть commodity read-model в basket seed generation и затем вынести его в отдельный слой, чтобы staple families управлялись не прямо в chat runtime.
+
+Дата и время: 2026-03-30 16:48
+Роль: P-BOT Universal Bot Architect
+Сделано: Проведено отдельное исследование по внедрению AI в shopping/copilot ботов; создан артефакт `docs/AI_INTELLIGENCE_MAP_2026.md`, который добавляет в проект явный трек умного бота: planner contracts, grounded tools, read-model intelligence, session/household memory, nutrition reasoning, evaluator/critic и proactive routines.
+Изменены файлы: docs/AI_INTELLIGENCE_MAP_2026.md, docs/RESEARCH_LOG.md, docs/STATE.md, docs/state.json, docs/EXEC_PLAN.md, docs/DECISIONS.md, docs/PROJECT_MAP.md, docs/PROJECT_HISTORY.md
+Результат/доказательство: свежие официальные и первичные источники по OpenAI Agentic Commerce, OpenAI memory/evals guidance, Groq tool use, OpenRouter structured outputs, Instacart, Walmart, Samsung Food и Yuka; артефакт `docs/AI_INTELLIGENCE_MAP_2026.md`
+Следующий шаг: Перевести AI intelligence map в инженерный backlog: planner contract v2, tool/result validators, session memory и evaluator layer.

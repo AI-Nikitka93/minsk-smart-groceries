@@ -22,6 +22,7 @@ Agentic stabilization sprint for `bot-worker`: Groq tool-loop over Turso with pr
 - English README: `README.en.md`
 - License: `LICENSE`
 - Bot identity pack: `docs/BOT_IDENTITY.md`
+- AI intelligence map: `docs/AI_INTELLIGENCE_MAP_2026.md`
 - Cloudflare config: `wrangler.toml`
 - Node bootstrap: `package.json`, `tsconfig.json`
 - GitHub Actions workflow: `.github/workflows/parser.yml`
