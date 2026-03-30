@@ -1,16 +1,17 @@
 # Current State
 
 - Goal: Move from approved architecture to deployable parser and Telegram bot workers for Smart Grocery Assistant.
-- Current task: A global benchmark and strategic roadmap have been added so the project can evolve from a merely working bot into a world-class Telegram-first grocery copilot with grounded baskets, health/composition reasoning, household memory, and local price intelligence.
+- Current task: The world-class roadmap has now been translated into the first executable delivery checkpoint: a concrete delivery backlog plus a stricter duration-aware basket quality contract in `bot-worker`, so 3-day and 7-day baskets are validated against family diversity and core-category requirements before the answer is sent.
 - Status: IN_PROGRESS
 - Active step: `docs/EXEC_PLAN.md` step 13
-- Next step: Convert `docs/WORLD_CLASS_ROADMAP_2026.md` into the next engineering backlog by prioritizing P0/P1: grounded answer contracts, category read-models, real basket quality, and stronger health/composition reasoning.
+- Next step: Use `docs/DELIVERY_BACKLOG_2026-03-30.md` to implement the next P0/P1 code step: category read-model v1 for staple goods (`масло`, `молоко`, `гречка`, `хлеб`, `яйца`) so `cheapest` and `basket` stop depending on noisy raw catalog matches.
 - Blockers:
   - Live user retests still show that the bot can transport a reply but not yet consistently solve the shopping task at a world-class level.
   - Parsed catalog coverage and category semantics remain too weak for several staple commodity terms (`масло`, `молоко`, `торт`, `гречка`, `яйца`, `хлеб`), which limits both basket quality and AI planning.
 - Artifacts:
   - `.env.operator.local` (local ignored secret intake file)
   - `docs/BOT_IDENTITY.md`
+  - `docs/DELIVERY_BACKLOG_2026-03-30.md`
   - `docs/WORLD_CLASS_ROADMAP_2026.md`
   - `drizzle.config.ts`
   - `src/db/schema.ts`

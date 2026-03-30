@@ -27,6 +27,7 @@ Smart Grocery Assistant for Minsk: Telegram bot plus Telegram channel that track
 - `advisory-engine`: basket optimization and composition analysis.
 - `ops-observability`: logs, health checks, exports, and admin controls.
 - `docs/WORLD_CLASS_ROADMAP_2026.md`: strategic benchmark and improvement map against global product leaders.
+- `docs/DELIVERY_BACKLOG_2026-03-30.md`: execution backlog derived from the world-class roadmap.
 
 ## External Dependencies
 - Grocery sites: `green-dostavka.by`, `edostavka.by`, `gippo-market.by`, `emall.by`

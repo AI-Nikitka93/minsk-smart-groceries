@@ -95,6 +95,11 @@
 - Why: Global leaders already dominate separate slices such as meal planning, ingredient scanning, and agentic retail; a narrow “where is it cheaper” bot would be too easy to outgrow and too weak as a moat.
 - Impact: Future roadmap should prioritize basket quality, category read-models, safer health explanations, household memory, and standing intents before cosmetic chat polish.
 
+## 2026-03-30 - Basket quality must scale with shopping horizon
+- Decision: Basket validation now depends on requested duration, with stricter family diversity and core-category requirements for 3-day and 7-day baskets.
+- Why: A basket that looks acceptable for a short shopping trip becomes obviously weak and untrustworthy when the user asks for multiple days or a week.
+- Impact: `build_budget_basket` can now reject underpowered baskets earlier, and the next quality step should focus on a category read-model rather than piling more weak catalog matches into long-horizon baskets.
+
 ## 2026-03-30 - Final user text must come from LLM synthesis, not tool fallback strings
 - Decision: Keep `fallbackText` only as an emergency backup path, strip it out before tool results are sent back to Groq, and add a dedicated final synthesis pass over executed tool outputs.
 - Why: Live user feedback showed that deterministic fallback phrasing still made the bot feel fake-smart even after tool calling was added.

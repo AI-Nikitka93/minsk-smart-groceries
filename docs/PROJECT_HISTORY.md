@@ -258,3 +258,10 @@
 Изменены файлы: docs/WORLD_CLASS_ROADMAP_2026.md, docs/RESEARCH_LOG.md, docs/STATE.md, docs/state.json, docs/EXEC_PLAN.md, docs/PROJECT_MAP.md, docs/PROJECT_HISTORY.md
 Результат/доказательство: international official sources по Instacart, OpenAI+Instacart, Walmart Sparky, Walmart+Google, Samsung Food, AnyList, Yuka, TruthIn, FoodSwitch, McKinsey agentic commerce; артефакт `docs/WORLD_CLASS_ROADMAP_2026.md`
 Следующий шаг: Вытащить из roadmap ближайший P0/P1 backlog и превратить его в конкретные инженерные задачи следующих спринтов.
+
+Дата и время: 2026-03-30 16:33
+Роль: P-BOT Universal Bot Architect
+Сделано: Roadmap переведён в исполнимый delivery backlog, а basket contract ужесточён под горизонт закупки: для 3-дневных и недельных корзин теперь проверяются minimum family diversity, core categories и общая полнота набора до отправки ответа пользователю.
+Изменены файлы: docs/DELIVERY_BACKLOG_2026-03-30.md, src/apps/bot-worker/index.ts, docs/STATE.md, docs/state.json, docs/EXEC_PLAN.md, docs/DECISIONS.md, docs/PROJECT_MAP.md, docs/PROJECT_HISTORY.md
+Результат/доказательство: `npm run typecheck` -> success; `rg -n "TODO|placeholder|insert code" "src/apps/bot-worker/index.ts" "docs/DELIVERY_BACKLOG_2026-03-30.md"` -> only real Telegram `input_field_placeholder` matches; `npx wrangler deploy --config "wrangler.toml"` -> version `85f20dd5-7439-4169-bde5-b76f849ec6d4`; `GET /health` -> `ok: true`; synthetic webhook smoke-tests (`собери корзину на 3 дня`, `собери корзину на неделю при диабете`) -> `HookResponse=ok`, `delta=2`
+Следующий шаг: Реализовать category read-model v1 для staple goods, чтобы `cheapest` и `basket` перестали зависеть от шумного raw catalog matching.

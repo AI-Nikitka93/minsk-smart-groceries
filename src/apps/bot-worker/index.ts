@@ -593,7 +593,7 @@ async function handleMessage(message: TelegramMessage, env: BotWorkerEnv): Promi
   }
 
   if (plan.wantsBasket) {
-    const basketResult = assembleBudgetBasket(products, plan.budgetMinor, intent);
+    const basketResult = assembleBudgetBasket(products, plan.budgetMinor, null, intent);
     if (!basketResult.reliable) {
       await sendTelegramText(env, message.chat.id, buildBasketFollowUpMessage(text, basketResult.reason));
       return;
@@ -1080,7 +1080,7 @@ async function executeBuildBasketTool(
     responseMode: "assistant",
   };
   const products = await collectBasketSeedProducts(db, queries, intent);
-  const basket = assembleBudgetBasket(products, budgetMinor, intent);
+  const basket = assembleBudgetBasket(products, budgetMinor, durationDays, intent);
 
   return {
     name: "build_budget_basket",
@@ -1092,6 +1092,12 @@ async function executeBuildBasketTool(
       productQueries: queries,
       products: basket.items.map(serializeProductForModel),
       reason: basket.reason,
+      quality: {
+        reliable: basket.reliable,
+        familyCount: basket.familyCount,
+        requiredFamilyCount: basket.requiredFamilyCount,
+        totalRub: Number((basket.totalMinor / 100).toFixed(2)),
+      },
       fallbackText: basket.reliable
         ? buildBasketReply(userQuery, basket.items, budgetMinor, intent)
         : buildBasketFollowUpMessage(userQuery, basket.reason),
@@ -3221,14 +3227,24 @@ function isPlannedAction(value: unknown): value is PlannedAction {
 function assembleBudgetBasket(
   products: AssistantProductRow[],
   budgetMinor: number | null,
+  durationDays: number | null,
   intent: SearchIntent,
-): { items: AssistantProductRow[]; reliable: boolean; reason: string } {
+): {
+  items: AssistantProductRow[];
+  reliable: boolean;
+  reason: string;
+  familyCount: number;
+  requiredFamilyCount: number;
+  totalMinor: number;
+} {
   const sorted = products
     .slice()
     .filter((product) => !shouldRejectBasketCandidate(product, intent))
     .sort((left, right) => scoreBasketCandidate(right, intent) - scoreBasketCandidate(left, intent));
   const picked: AssistantProductRow[] = [];
   const usedFamilies = new Set<string>();
+  const targetFamilies = getRequiredBasketFamilyCount(durationDays);
+  const maxItems = getTargetBasketItemCount(durationDays);
   let total = 0;
 
   for (const product of sorted) {
@@ -3244,7 +3260,7 @@ function assembleBudgetBasket(
       continue;
     }
 
-    if (familyAlreadyUsed) {
+    if (familyAlreadyUsed && usedFamilies.size < targetFamilies) {
       continue;
     }
 
@@ -3254,7 +3270,7 @@ function assembleBudgetBasket(
       usedFamilies.add(family);
     }
 
-    if (picked.length >= 5) {
+    if (picked.length >= maxItems) {
       break;
     }
   }
@@ -3264,15 +3280,21 @@ function assembleBudgetBasket(
       items: [],
       reliable: false,
       reason: "В базе мало подходящих базовых продуктов для уверенной корзины. Лучше уточнить основу рациона или тип корзины.",
+      familyCount: 0,
+      requiredFamilyCount: targetFamilies,
+      totalMinor: 0,
     };
   }
 
-  const quality = assessBasketQuality(picked, budgetMinor, intent);
+  const quality = assessBasketQuality(picked, budgetMinor, durationDays, intent);
   if (!quality.reliable) {
     return {
       items: [],
       reliable: false,
       reason: quality.reason,
+      familyCount: quality.familyCount,
+      requiredFamilyCount: quality.requiredFamilyCount,
+      totalMinor: total,
     };
   }
 
@@ -3280,7 +3302,34 @@ function assembleBudgetBasket(
     items: picked,
     reliable: true,
     reason: "",
+    familyCount: quality.familyCount,
+    requiredFamilyCount: quality.requiredFamilyCount,
+    totalMinor: total,
   };
+}
+
+function getRequiredBasketFamilyCount(durationDays: number | null): number {
+  if (durationDays !== null && durationDays >= 7) {
+    return 4;
+  }
+
+  if (durationDays !== null && durationDays >= 3) {
+    return 3;
+  }
+
+  return 2;
+}
+
+function getTargetBasketItemCount(durationDays: number | null): number {
+  if (durationDays !== null && durationDays >= 7) {
+    return 6;
+  }
+
+  if (durationDays !== null && durationDays >= 3) {
+    return 5;
+  }
+
+  return 4;
 }
 
 function scoreBasketCandidate(row: AssistantProductRow, intent: SearchIntent): number {
@@ -3333,22 +3382,39 @@ function looksLikeTinySeedPack(title: string): boolean {
 function assessBasketQuality(
   items: AssistantProductRow[],
   budgetMinor: number | null,
+  durationDays: number | null,
   intent: SearchIntent,
-): { reliable: boolean; reason: string } {
+) : { reliable: boolean; reason: string; familyCount: number; requiredFamilyCount: number } {
   const families = new Set(items.map((item) => inferProductFamily(item.title)).filter((family) => family !== "other"));
   const totalMinor = items.reduce((sum, item) => sum + (item.priceMinor ?? 0), 0);
+  const requiredFamilyCount = getRequiredBasketFamilyCount(durationDays);
+  const requiredCoreFamilies = getRequiredCoreFamilies(durationDays);
+  const missingCoreFamilies = requiredCoreFamilies.filter((family) => !families.has(family));
 
-  if (items.length < 3) {
+  if (items.length < Math.min(getTargetBasketItemCount(durationDays), requiredFamilyCount + 1)) {
     return {
       reliable: false,
       reason: "Сейчас нашлось слишком мало внятных позиций для полноценной корзины.",
+      familyCount: families.size,
+      requiredFamilyCount,
     };
   }
 
-  if (families.size < 2) {
+  if (families.size < requiredFamilyCount) {
     return {
       reliable: false,
-      reason: "Подборка получилась слишком однотипной. Нужны хотя бы 2-3 базовые категории продуктов.",
+      reason: `Подборка получилась слишком однотипной. Нужны хотя бы ${requiredFamilyCount} базовые категории продуктов.`,
+      familyCount: families.size,
+      requiredFamilyCount,
+    };
+  }
+
+  if (missingCoreFamilies.length > 0) {
+    return {
+      reliable: false,
+      reason: `В корзине не хватает базовых опор: ${missingCoreFamilies.join(", ")}.`,
+      familyCount: families.size,
+      requiredFamilyCount,
     };
   }
 
@@ -3356,6 +3422,8 @@ function assessBasketQuality(
     return {
       reliable: false,
       reason: "Подборка заняла слишком маленькую долю бюджета и выглядит как неполная корзина, а не реальный набор продуктов.",
+      familyCount: families.size,
+      requiredFamilyCount,
     };
   }
 
@@ -3363,13 +3431,38 @@ function assessBasketQuality(
     return {
       reliable: false,
       reason: "Среди найденных позиций слишком много спорных или случайных товаров для полезной корзины.",
+      familyCount: families.size,
+      requiredFamilyCount,
+    };
+  }
+
+  if ((intent.wantsHealthy || intent.wantsDiagnosisAdvice) && items.some((item) => scoreMedicalSuitability(item, intent) < -20)) {
+    return {
+      reliable: false,
+      reason: "Среди найденных позиций есть товары, которые слишком плохо подходят под ограничения пользователя.",
+      familyCount: families.size,
+      requiredFamilyCount,
     };
   }
 
   return {
     reliable: true,
     reason: "",
+    familyCount: families.size,
+    requiredFamilyCount,
   };
+}
+
+function getRequiredCoreFamilies(durationDays: number | null): string[] {
+  if (durationDays !== null && durationDays >= 7) {
+    return ["grain", "protein", "vegetable"];
+  }
+
+  if (durationDays !== null && durationDays >= 3) {
+    return ["grain", "vegetable"];
+  }
+
+  return [];
 }
 
 function inferProductFamily(title: string): string {
