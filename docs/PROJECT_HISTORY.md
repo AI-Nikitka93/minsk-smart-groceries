@@ -244,3 +244,10 @@
 Изменены файлы: src/apps/bot-worker/index.ts, docs/STATE.md, docs/state.json, docs/PROJECT_HISTORY.md
 Результат/доказательство: DB probes showed that cheapest vegetable/protein seeds still included `0.5 г` packs and `F1`; `npm run typecheck` -> success; `npx wrangler deploy --config "wrangler.toml"` -> version `f95e096f-1f9e-4023-ab05-da3721b600d3`; synthetic webhook smoke-tests `собери корзину на 3 дня` and `собери корзину на неделю при диабете` -> `hookStatus 200`, `delta=2`
 Следующий шаг: Получить живой Telegram ретест на двух basket-сценариях и только потом решать, нужен ли уже отдельный category read-model вместо дальнейшего basket hardening.
+
+Дата и время: 2026-03-30 03:04
+Роль: P-BOT Universal Bot Architect
+Сделано: Убран главный источник fake-smart ответов в agentic path: `fallbackText` больше не подмешивается в tool results для Groq, а после tool loop добавлен отдельный финальный synthesis-pass, который формирует пользовательский ответ из реальных данных инструментов; deterministic fallback оставлен только как аварийный backup.
+Изменены файлы: src/apps/bot-worker/index.ts, docs/STATE.md, docs/state.json, docs/EXEC_PLAN.md, docs/DECISIONS.md, docs/PROJECT_HISTORY.md
+Результат/доказательство: `npm run typecheck` -> success; `rg -n "TODO|placeholder|insert code" "src/apps/bot-worker/index.ts"` -> only real Telegram `input_field_placeholder` matches; `npx wrangler deploy --config "wrangler.toml"` -> version `7d2d85e0-500b-446f-a919-0dac275c036a`; `GET /health` -> `ok: true`; synthetic webhook smoke-tests (`у меня диабет и бюджет 30 рублей`, `где дешевле купить масло`, `собери корзину на 3 дня`) -> `HookResponse=ok`, `delta=2`
+Следующий шаг: Получить живой Telegram ретест на трёх сценариях и оценить уже не транспорт, а то, стал ли ответ действительно AI-native и grounded после synthesis-pass.

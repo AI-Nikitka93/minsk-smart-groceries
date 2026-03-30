@@ -1,12 +1,12 @@
 # Current State
 
 - Goal: Move from approved architecture to deployable parser and Telegram bot workers for Smart Grocery Assistant.
-- Current task: `bot-worker` runs through an LLM-first tool-loop and now has a third basket hardening checkpoint: basket assembly rejects tiny seed packs (`0.5 г`, `F1`), avoids duplicate family picks, and uses broader protein anchors like `фарш` instead of over-specific empty queries.
+- Current task: `bot-worker` now strips deterministic `fallbackText` out of tool results before they reach the model and adds a dedicated Groq synthesis pass after tool execution, so final user replies come from AI over grounded tool data instead of pseudo-smart canned text.
 - Status: IN_PROGRESS
 - Active step: `docs/EXEC_PLAN.md` step 13
-- Next step: Run live Telegram retest on basket flows (`собери корзину на 3 дня`, `собери корзину на неделю при диабете`) against version `f95e096f-1f9e-4023-ab05-da3721b600d3`; if basket quality is finally acceptable, close step 13 and harden tool contracts in step 14.
+- Next step: Run a live Telegram quality retest against version `7d2d85e0-500b-446f-a919-0dac275c036a` on `у меня диабет и бюджет 30 рублей`, `где дешевле купить масло`, and `собери корзину на 3 дня` to verify that the bot now sounds AI-native rather than echoing tool fallback strings; then harden tool contracts in step 14.
 - Blockers:
-  - Live user retest after the third basket hardening checkpoint is still pending, so the tool-loop is deployed and smoke-tested but not yet proven by real user chat logs.
+  - Live user retest after the new synthesis-pass checkpoint is still pending, so the tool-loop is deployed and smoke-tested but not yet proven by real user chat logs for response quality.
   - Parsed catalog coverage is too weak for several staple commodity terms (`масло`, `молоко`, `торт`, `гречка`), which limits downstream planner quality.
 - Artifacts:
   - `.env.operator.local` (local ignored secret intake file)

@@ -89,3 +89,8 @@
 - Decision: Route chat messages through a Groq tool loop first, with explicit tools for profile saving, product search, cheapest lookup, basket assembly, and composition-aware selection; keep the older hybrid flow only as fallback.
 - Why: The user explicitly wants the AI to decide what to do from free-form chat input, and the previous planner-plus-heuristics layer still felt fake-smart in live conversations.
 - Impact: Product intelligence is now grounded through tool execution rather than loose planner text, and future work should strengthen tool validation instead of adding more heuristics.
+
+## 2026-03-30 - Final user text must come from LLM synthesis, not tool fallback strings
+- Decision: Keep `fallbackText` only as an emergency backup path, strip it out before tool results are sent back to Groq, and add a dedicated final synthesis pass over executed tool outputs.
+- Why: Live user feedback showed that deterministic fallback phrasing still made the bot feel fake-smart even after tool calling was added.
+- Impact: The answer path now becomes `user -> tool loop -> grounded tool results -> Groq synthesis -> Telegram`, while canned text is reserved only for failure handling.

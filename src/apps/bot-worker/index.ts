@@ -683,13 +683,16 @@ async function runAgenticAssistant(
 
   let currentProfile = persistedProfile;
   let lastToolOutcome: AgenticToolOutcome | null = null;
+  const toolTrace: Array<{ name: string; payload: Record<string, unknown> }> = [];
 
   try {
     for (let iteration = 0; iteration < 4; iteration += 1) {
       const response = await callGroqWithTools(env, messages, tools);
       const assistantMessage = response.choices?.[0]?.message;
       if (!assistantMessage) {
-        return lastToolOutcome ? buildAgenticFallbackReply(lastToolOutcome) : null;
+        return lastToolOutcome
+          ? await synthesizeAgenticReply(env, userQuery, currentProfile, toolTrace, lastToolOutcome)
+          : null;
       }
 
       messages.push({
@@ -701,7 +704,7 @@ async function runAgenticAssistant(
       const toolCalls = assistantMessage.tool_calls ?? [];
       if (toolCalls.length === 0) {
         const finalText = assistantMessage.content?.trim();
-        if (finalText && lastToolOutcome) {
+        if (finalText) {
           return {
             text: finalText,
             parseMode: lastToolOutcome?.parseMode ?? "Markdown",
@@ -709,7 +712,9 @@ async function runAgenticAssistant(
           };
         }
 
-        return lastToolOutcome ? buildAgenticFallbackReply(lastToolOutcome) : null;
+        return lastToolOutcome
+          ? await synthesizeAgenticReply(env, userQuery, currentProfile, toolTrace, lastToolOutcome)
+          : null;
       }
 
       for (const toolCall of toolCalls) {
@@ -725,12 +730,17 @@ async function runAgenticAssistant(
           currentProfile = outcome.updatedProfile;
         }
         lastToolOutcome = outcome;
+        const sanitizedPayload = stripFallbackTextForModel(outcome.payload);
+        toolTrace.push({
+          name: outcome.name,
+          payload: sanitizedPayload,
+        });
 
         messages.push({
           role: "tool",
           tool_call_id: toolCall.id,
           name: toolCall.function.name,
-          content: JSON.stringify(outcome.payload, null, 2),
+          content: JSON.stringify(sanitizedPayload, null, 2),
         });
       }
     }
@@ -739,7 +749,9 @@ async function runAgenticAssistant(
     return lastToolOutcome ? buildAgenticFallbackReply(lastToolOutcome) : null;
   }
 
-  return lastToolOutcome ? buildAgenticFallbackReply(lastToolOutcome) : null;
+  return lastToolOutcome
+    ? await synthesizeAgenticReply(env, userQuery, currentProfile, toolTrace, lastToolOutcome)
+    : null;
 }
 
 function buildAgentToolSchemas(): Record<string, unknown>[] {
@@ -1207,6 +1219,108 @@ function buildAgenticFallbackReply(outcome: AgenticToolOutcome): AgenticReply {
     parseMode: outcome.parseMode,
     replyMarkup: outcome.replyMarkup,
   };
+}
+
+function stripFallbackTextForModel(payload: Record<string, unknown>): Record<string, unknown> {
+  const { fallbackText: _fallbackText, ...rest } = payload;
+  return rest;
+}
+
+async function synthesizeAgenticReply(
+  env: BotWorkerEnv,
+  userQuery: string,
+  profile: PersistedUserProfile | null,
+  toolTrace: Array<{ name: string; payload: Record<string, unknown> }>,
+  lastToolOutcome: AgenticToolOutcome,
+): Promise<AgenticReply> {
+  try {
+    const content = await callGroqAgenticSynthesis(env, userQuery, profile, toolTrace);
+    if (content) {
+      return {
+        text: content,
+        parseMode: lastToolOutcome.parseMode ?? "Markdown",
+        replyMarkup: lastToolOutcome.replyMarkup,
+      };
+    }
+  } catch (error) {
+    console.error("Agentic synthesis failed; using emergency fallback", error);
+  }
+
+  return buildAgenticFallbackReply(lastToolOutcome);
+}
+
+async function callGroqAgenticSynthesis(
+  env: BotWorkerEnv,
+  userQuery: string,
+  profile: PersistedUserProfile | null,
+  toolTrace: Array<{ name: string; payload: Record<string, unknown> }>,
+): Promise<string> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort("Groq agentic synthesis timeout"), GROQ_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(GROQ_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${env.GROQ_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: env.GROQ_MODEL ?? DEFAULT_GROQ_MODEL,
+        temperature: 0.35,
+        max_completion_tokens: 900,
+        messages: [
+          {
+            role: "system",
+            content: [
+              "Ты финальный AI-ассистент продуктового Telegram-бота для Минска.",
+              "Ниже уже есть выполненные инструменты и реальные данные из базы.",
+              "Сформируй живой, полезный и человеческий ответ только на основе этих данных.",
+              "Не упоминай инструменты, tool calls, JSON, status fields или внутренние поля.",
+              "Не копируй механические фразы вроде fallbackText и не отвечай сухими шаблонами.",
+              "Если сохранён профиль пользователя, коротко подтвердить, что именно запомнено, и подсказать следующий естественный шаг.",
+              "Если нашли товары, объясни выбор как умный продуктовый ассистент: цена, магазин, ссылка, а при необходимости состав и почему вариант лучше.",
+              "Если запрос был про корзину, собери осмысленный список и коротко объясни логику подбора.",
+              "Если результатов мало или они слабые, задай один короткий уточняющий вопрос вместо выдумывания.",
+              "Если запрос связан с диагнозом или ограничением, не давай медицинских обещаний; говори осторожно и опирайся только на состав и свойства, которые видны в данных.",
+              "Пиши только по-русски.",
+              "Используй Telegram Markdown: короткий заголовок, затем список или 1-2 абзаца.",
+              "Цены выделяй через *...*.",
+            ].join(" "),
+          },
+          {
+            role: "user",
+            content: JSON.stringify(
+              {
+                query: userQuery,
+                currentProfile: serializeProfileForModel(profile),
+                toolResults: toolTrace,
+              },
+              null,
+              2,
+            ),
+          },
+        ],
+      }),
+      signal: controller.signal,
+    });
+
+    const payload = (await response.json()) as GroqChatCompletionResponse;
+    if (!response.ok) {
+      throw new Error(
+        `Groq agentic synthesis ${response.status}: ${payload.error?.message ?? JSON.stringify(payload)}`,
+      );
+    }
+
+    const content = payload.choices?.[0]?.message?.content?.trim();
+    if (!content) {
+      throw new Error("Groq agentic synthesis returned an empty assistant message");
+    }
+
+    return content;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function handleInlineQuery(query: TelegramInlineQuery, env: BotWorkerEnv): Promise<void> {
