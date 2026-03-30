@@ -252,6 +252,44 @@ const EXPLICIT_DIET_TERMS = [
   { pattern: /без\s+сахар/iu, label: "без сахара", terms: ["сахар", "сироп"] },
   { pattern: /без\s+молок/iu, label: "без молока", terms: ["молок", "сливк", "сыворот"] },
 ] as const;
+const COMMODITY_READ_MODELS = [
+  {
+    key: "масло",
+    aliases: ["масло", "масла", "масле", "маслом"],
+    searchQueries: ["масло подсолнечное", "масло оливковое", "масло сливочное"],
+    includeTerms: ["масло", "подсолнеч", "оливков", "рапсов", "сливоч"],
+    excludeTerms: ["круассан", "слойка", "стейк", "соус", "сырник", "лепешк", "лепёшк", "ролл", "бутербр", "корм", "семен"],
+  },
+  {
+    key: "молоко",
+    aliases: ["молоко", "молока", "молоке"],
+    searchQueries: ["молоко", "молоко 2.5%"],
+    includeTerms: ["молок"],
+    excludeTerms: ["шоколад", "коктейл", "печенье", "конфет", "сгущ", "смесь", "каша"],
+  },
+  {
+    key: "гречка",
+    aliases: ["гречка", "гречки", "гречку", "гречневая", "гречневой"],
+    searchQueries: ["крупа гречневая"],
+    includeTerms: ["греч", "крупа"],
+    excludeTerms: ["хлебц", "мука", "лапша", "чай", "смесь", "подушеч"],
+  },
+  {
+    key: "хлеб",
+    aliases: ["хлеб", "хлеба", "батон", "батона"],
+    searchQueries: ["хлеб"],
+    includeTerms: ["хлеб", "батон"],
+    excludeTerms: ["хлебопеч", "крошк", "смесь"],
+  },
+  {
+    key: "яйца",
+    aliases: ["яйцо", "яйца", "яиц", "яйце"],
+    searchQueries: ["яйцо куриное"],
+    includeTerms: ["яйц"],
+    excludeTerms: ["киндер", "сюрприз", "шоколад", "майонез", "лапша"],
+  },
+] as const;
+type CommodityReadModel = (typeof COMMODITY_READ_MODELS)[number];
 type DiagnosisRule = (typeof DIAGNOSIS_RULES)[number];
 type DiagnosisKey = DiagnosisRule["key"];
 
@@ -1491,7 +1529,11 @@ async function searchProductsForPlan(
 ): Promise<AssistantProductRow[]> {
   const limit = resolveAssistantProductLimit(intent);
   const rawQueries = [...plan.catalogQueries, ...intent.searchTerms];
+  const commodityModels = detectCommodityReadModels(rawQueries, intent.normalizedQuery);
+  const commodityQueries = commodityModels.flatMap((model) => model.searchQueries);
   const queries = [...new Set(rawQueries.map((value) => normalizeQuery(value)).filter((value) => value.length > 0))]
+    .concat(commodityQueries.map((value) => normalizeQuery(value)))
+    .filter((value, index, array) => value.length > 0 && array.indexOf(value) === index)
     .filter((value) => buildSearchIntent(value).searchTerms.length > 0);
 
   if (queries.length === 0) {
@@ -1506,9 +1548,10 @@ async function searchProductsForPlan(
 
   const deduped = dedupeOffers(combined);
   const ranked = rankOffers(deduped, intent);
+  const commodityRanked = commodityModels.length > 0 ? filterCommodityRows(ranked, commodityModels) : ranked;
 
   if (plan.compareCheapest) {
-    const strictMatches = filterStrictCheapestMatches(ranked, intent);
+    const strictMatches = filterStrictCheapestMatches(commodityRanked, intent);
     if (strictMatches.length === 0) {
       return [];
     }
@@ -1527,10 +1570,12 @@ async function searchProductsForPlan(
       .slice(0, limit);
   }
 
-  if (ranked.length === 0 && intent.searchTerms.length > 0) {
+  if (commodityRanked.length === 0 && intent.searchTerms.length > 0) {
     const approximateRows = await selectRelaxedOffers(db, intent, limit);
-    if (approximateRows.length > 0) {
-      return approximateRows.slice(0, limit).map((row) => ({
+    const filteredApproximateRows =
+      commodityModels.length > 0 ? filterCommodityRows(approximateRows, commodityModels) : approximateRows;
+    if (filteredApproximateRows.length > 0) {
+      return filteredApproximateRows.slice(0, limit).map((row) => ({
         ...row,
         matchKind: "loose",
         matchScore: row.matchScore ?? 20,
@@ -1538,16 +1583,18 @@ async function searchProductsForPlan(
     }
   }
 
-  if (ranked.length === 0) {
+  if (commodityRanked.length === 0) {
     const fallbackRows = await selectFallbackOffers(db, intent, limit * 3);
     const fallbackRanked = rankOffers(fallbackRows, intent);
+    const filteredFallbackRanked =
+      commodityModels.length > 0 ? filterCommodityRows(fallbackRanked, commodityModels) : fallbackRanked;
 
     if (plan.wantsBasket || plan.compareCheapest || plan.needsDiagnosisAdvice || intent.wantsHealthy) {
-      return fallbackRanked.slice(0, limit);
+      return filteredFallbackRanked.slice(0, limit);
     }
   }
 
-  return ranked.slice(0, limit);
+  return commodityRanked.slice(0, limit);
 }
 
 async function searchProducts(
@@ -1556,20 +1603,27 @@ async function searchProducts(
   limit: number,
 ): Promise<AssistantProductRow[]> {
   const intent = buildSearchIntent(query);
+  const commodityModels = detectCommodityReadModels([query, ...intent.searchTerms], intent.normalizedQuery);
   const primaryMatches = intent.searchTerms.length
     ? await selectMatchingOffers(db, intent, limit)
     : [];
 
   if (intent.searchTerms.length > 0) {
     if (primaryMatches.length > 0) {
-      return rankOffers(primaryMatches, intent).slice(0, limit);
+      const ranked = rankOffers(primaryMatches, intent);
+      const filtered = commodityModels.length > 0 ? filterCommodityRows(ranked, commodityModels) : ranked;
+      return filtered.slice(0, limit);
     }
 
-    return rankOffers(await selectRelaxedOffers(db, intent, limit), intent).slice(0, limit);
+    const relaxed = rankOffers(await selectRelaxedOffers(db, intent, limit), intent);
+    const filtered = commodityModels.length > 0 ? filterCommodityRows(relaxed, commodityModels) : relaxed;
+    return filtered.slice(0, limit);
   }
 
   const fallbackMatches = await selectFallbackOffers(db, intent, limit);
-  return rankOffers(dedupeOffers([...primaryMatches, ...fallbackMatches]), intent).slice(0, limit);
+  const ranked = rankOffers(dedupeOffers([...primaryMatches, ...fallbackMatches]), intent);
+  const filtered = commodityModels.length > 0 ? filterCommodityRows(ranked, commodityModels) : ranked;
+  return filtered.slice(0, limit);
 }
 
 async function selectMatchingOffers(
@@ -1918,6 +1972,32 @@ function buildTermLikePredicate(term: string) {
   }
 
   return likes.length === 1 ? likes[0] : or(...likes);
+}
+
+function detectCommodityReadModels(values: string[], normalizedQuery: string): CommodityReadModel[] {
+  const haystacks = [normalizedQuery, ...values.map((value) => normalizeQuery(value))];
+  return COMMODITY_READ_MODELS.filter((model) =>
+    haystacks.some((haystack) => model.aliases.some((alias) => haystack.includes(alias))),
+  );
+}
+
+function filterCommodityRows(rows: AssistantProductRow[], models: readonly CommodityReadModel[]): AssistantProductRow[] {
+  if (models.length === 0) {
+    return rows;
+  }
+
+  const filtered = rows.filter((row) => models.some((model) => rowMatchesCommodityModel(row, model)));
+  return filtered.length > 0 ? filtered : rows;
+}
+
+function rowMatchesCommodityModel(row: AssistantProductRow, model: CommodityReadModel): boolean {
+  const haystack = normalizeQuery(`${row.title} ${row.searchText} ${row.compositionText ?? ""}`);
+  const hasInclude = model.includeTerms.some((term) => haystack.includes(term));
+  if (!hasInclude) {
+    return false;
+  }
+
+  return !model.excludeTerms.some((term) => haystack.includes(term));
 }
 
 function filterConfidentMatches(

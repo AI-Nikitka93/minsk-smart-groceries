@@ -265,3 +265,10 @@
 Изменены файлы: docs/DELIVERY_BACKLOG_2026-03-30.md, src/apps/bot-worker/index.ts, docs/STATE.md, docs/state.json, docs/EXEC_PLAN.md, docs/DECISIONS.md, docs/PROJECT_MAP.md, docs/PROJECT_HISTORY.md
 Результат/доказательство: `npm run typecheck` -> success; `rg -n "TODO|placeholder|insert code" "src/apps/bot-worker/index.ts" "docs/DELIVERY_BACKLOG_2026-03-30.md"` -> only real Telegram `input_field_placeholder` matches; `npx wrangler deploy --config "wrangler.toml"` -> version `85f20dd5-7439-4169-bde5-b76f849ec6d4`; `GET /health` -> `ok: true`; synthetic webhook smoke-tests (`собери корзину на 3 дня`, `собери корзину на неделю при диабете`) -> `HookResponse=ok`, `delta=2`
 Следующий шаг: Реализовать category read-model v1 для staple goods, чтобы `cheapest` и `basket` перестали зависеть от шумного raw catalog matching.
+
+Дата и время: 2026-03-30 16:38
+Роль: P-BOT Universal Bot Architect
+Сделано: Реализован первый commodity read-model слой внутри `bot-worker`: для `масло`, `молоко`, `гречка`, `хлеб` и `яйца` поиск теперь получает commodity-specific query expansion и фильтрацию строк каталога, чтобы staple lookups меньше зависели от шумных raw matches.
+Изменены файлы: src/apps/bot-worker/index.ts, docs/STATE.md, docs/state.json, docs/EXEC_PLAN.md, docs/DECISIONS.md, docs/PROJECT_HISTORY.md
+Результат/доказательство: `npm run typecheck` -> success; `rg -n "TODO|placeholder|insert code" "src/apps/bot-worker/index.ts"` -> only real Telegram `input_field_placeholder` matches; `npx wrangler deploy --config "wrangler.toml"` -> version `b14e09da-a35d-4ecf-ae05-fc19ccb58cce`; `GET /health` -> `ok: true`; synthetic webhook smoke-tests (`где дешевле купить масло`, `где дешевле купить молоко`, `где дешевле купить яйца`, `покажи гречку и ссылки`) -> `HookResponse=ok`, `delta=2`
+Следующий шаг: Протянуть commodity read-model в basket seed generation и затем вынести его в отдельный слой, чтобы staple families управлялись не прямо в chat runtime.

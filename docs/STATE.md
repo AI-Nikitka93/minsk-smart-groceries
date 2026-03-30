@@ -1,10 +1,10 @@
 # Current State
 
 - Goal: Move from approved architecture to deployable parser and Telegram bot workers for Smart Grocery Assistant.
-- Current task: The world-class roadmap has now been translated into the first executable delivery checkpoint: a concrete delivery backlog plus a stricter duration-aware basket quality contract in `bot-worker`, so 3-day and 7-day baskets are validated against family diversity and core-category requirements before the answer is sent.
+- Current task: Category read-model v1 for staple goods is now wired into `bot-worker`: commodity-aware search expansion and row filtering are applied for `масло`, `молоко`, `гречка`, `хлеб`, and `яйца`, so `cheapest` and direct staple lookups stop leaning entirely on noisy raw catalog matches.
 - Status: IN_PROGRESS
 - Active step: `docs/EXEC_PLAN.md` step 13
-- Next step: Use `docs/DELIVERY_BACKLOG_2026-03-30.md` to implement the next P0/P1 code step: category read-model v1 for staple goods (`масло`, `молоко`, `гречка`, `хлеб`, `яйца`) so `cheapest` and `basket` stop depending on noisy raw catalog matches.
+- Next step: Deepen the staple read-model into basket execution: reuse the new commodity profiles inside basket seed generation and then start extracting this logic into a dedicated read-model layer instead of keeping it only inside `bot-worker`.
 - Blockers:
   - Live user retests still show that the bot can transport a reply but not yet consistently solve the shopping task at a world-class level.
   - Parsed catalog coverage and category semantics remain too weak for several staple commodity terms (`масло`, `молоко`, `торт`, `гречка`, `яйца`, `хлеб`), which limits both basket quality and AI planning.

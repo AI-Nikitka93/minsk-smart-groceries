@@ -100,6 +100,11 @@
 - Why: A basket that looks acceptable for a short shopping trip becomes obviously weak and untrustworthy when the user asks for multiple days or a week.
 - Impact: `build_budget_basket` can now reject underpowered baskets earlier, and the next quality step should focus on a category read-model rather than piling more weak catalog matches into long-horizon baskets.
 
+## 2026-03-30 - Start staple goods search through a commodity read-model layer
+- Decision: Introduce a first commodity read-model directly inside `bot-worker` for `масло`, `молоко`, `гречка`, `хлеб`, and `яйца`, with commodity-specific query expansion and row filtering.
+- Why: Raw catalog matching still lets noisy unrelated goods leak into staple lookups, which breaks both `find_cheapest` trust and downstream basket quality.
+- Impact: Staple searches now have a commodity-aware path, and the next step is to reuse and then extract this logic into a more explicit read-model for basket seeding and long-term maintainability.
+
 ## 2026-03-30 - Final user text must come from LLM synthesis, not tool fallback strings
 - Decision: Keep `fallbackText` only as an emergency backup path, strip it out before tool results are sent back to Groq, and add a dedicated final synthesis pass over executed tool outputs.
 - Why: Live user feedback showed that deterministic fallback phrasing still made the bot feel fake-smart even after tool calling was added.
